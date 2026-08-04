@@ -81,7 +81,7 @@ interface MedDao {
     suspend fun deleteMed(tagId: String)
 }
 
-@Database(entities = [Medication::class, DoseLog::class], version = 1)
+@Database(entities = [Medication::class, DoseLog::class], version = 1, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): MedDao
 

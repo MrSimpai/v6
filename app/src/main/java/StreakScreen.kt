@@ -185,7 +185,7 @@ fun StreakCelebration(days: Int, onDismiss: () -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = Pal.Mint),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = 32.dp, bottom = 44.dp)
+                .padding(start = 32.dp, end = 32.dp, bottom = 44.dp)
                 .fillMaxWidth()
                 .height(56.dp)
                 .alpha(enter.value)
