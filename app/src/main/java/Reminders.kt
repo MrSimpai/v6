@@ -35,8 +35,10 @@ object Reminders {
     const val ACTION_DUE = "com.example.medtap.DUE"
     const val ACTION_NAG = "com.example.medtap.NAG"
     const val ACTION_REPOST = "com.example.medtap.REPOST"
+    const val ACTION_ICON = "com.example.medtap.ICON"
     const val EXTRA_TAG_ID = "tagId"
     const val EXTRA_SLOT = "slot"
+    const val EXTRA_MOOD = "mood"
 
     private fun notifId(tagId: String) = tagId.hashCode() and 0x0FFFFFFF
 
@@ -104,6 +106,41 @@ object Reminders {
         )
     }
 
+    /**
+     * Repainting the launcher icon can force-stop the app and makes the launcher redraw,
+     * so it never happens anywhere near the user. A minute after a dose is logged she has
+     * moved on, and a brief flicker on an idle home screen is nothing like the app
+     * disappearing under her thumb. Inexact and RTC, not RTC_WAKEUP: waking the device
+     * to repaint an icon would be absurd.
+     */
+    private fun scheduleIconUpdate(ctx: Context, mood: Mood, delayMs: Long) {
+        val pi = PendingIntent.getBroadcast(
+            ctx, ACTION_ICON.hashCode(),
+            Intent(ctx, ReminderReceiver::class.java).apply {
+                action = ACTION_ICON
+                putExtra(EXTRA_MOOD, mood.name)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        ctx.getSystemService(AlarmManager::class.java)
+            .set(AlarmManager.RTC, System.currentTimeMillis() + delayMs, pi)
+    }
+
+    /**
+     * Tear everything down for a medication being removed. The PendingIntent request code
+     * is keyed on tagId + action and ignores the slot, so one cancel per action clears any
+     * pending alarm whatever slot it was armed for.
+     */
+    fun cancelAll(ctx: Context, med: Medication) {
+        val am = ctx.getSystemService(AlarmManager::class.java)
+        val slot = Slots.todayAt(med)
+        am.cancel(alarmPI(ctx, ACTION_DUE, med, slot))
+        am.cancel(alarmPI(ctx, ACTION_NAG, med, slot))
+        val nm = NotificationManagerCompat.from(ctx)
+        nm.cancel(notifId(med.tagId))
+        nm.cancel(notifId(med.tagId) + 1)
+    }
+
     fun cancelNag(ctx: Context, med: Medication, slot: Long) =
         ctx.getSystemService(AlarmManager::class.java).cancel(alarmPI(ctx, ACTION_NAG, med, slot))
 
@@ -160,7 +197,6 @@ object Reminders {
             .setShowWhen(true).setWhen(slot)
             .setContentIntent(open)
             .setDeleteIntent(repost)
-            .setFullScreenIntent(open, true)
             .addAction(
                 NotificationCompat.Action.Builder(
                     R.drawable.ic_stat_dragon, "Ouvrir", open
@@ -174,13 +210,32 @@ object Reminders {
     }
 
     /** Fires the instant a dose is logged -- scanned or ticked off: dragon celebrates, nagging stops. */
-    fun resolve(ctx: Context, med: Medication, slot: Long, streak: Int) {
+    /** Housekeeping after a dose lands: silence the nag, arm tomorrow, calm the icon. */
+    fun resolve(ctx: Context, med: Medication, slot: Long) {
         ensureChannels(ctx)
         NotificationManagerCompat.from(ctx).cancel(notifId(med.tagId))
         cancelNag(ctx, med, slot)
         scheduleNext(ctx, med)
+        scheduleIconUpdate(ctx, Mood.Sleeping, 60_000L)
+    }
 
-        val line = FloMessages.celebration(streak, slot)
+    /**
+     * The congratulation, as a notification.
+     *
+     * Only posted when she is NOT looking at the app -- a tag tapped against a bottle with
+     * the phone asleep, typically. When she logs a dose in the app she gets the cheering
+     * dragon, and on the last dose of the day a full-screen celebration, so a notification
+     * on top of that would just be the same news twice.
+     *
+     * [dayStreak] is non-zero only when this was the last dose of the day; it outranks the
+     * per-medication streak, because "nothing missed all day" is the better thing to say.
+     */
+    fun celebrate(ctx: Context, med: Medication, slot: Long, streak: Int, dayStreak: Int) {
+        ensureChannels(ctx)
+        val line = if (dayStreak > 0)
+            FloLine("Journée complète 🐉", FloMessages.dayStreakLine(dayStreak))
+        else
+            FloMessages.celebration(streak, slot)
         val yay = NotificationCompat.Builder(ctx, CHANNEL_YAY)
             .setSmallIcon(R.drawable.ic_stat_dragon)
             .setLargeIcon(Dragon.faceBitmap(256, Mood.Cheering))
@@ -199,10 +254,6 @@ object Reminders {
         if (NotificationManagerCompat.from(ctx).areNotificationsEnabled()) {
             NotificationManagerCompat.from(ctx).notify(notifId(med.tagId) + 1, yay)
         }
-
-        // resolve() is only ever reached from the UI, so the launcher icon waits until
-        // she closes the app. Swapping it here would kill the app under her.
-        IconSwitcher.requestOnLeave(Mood.Sleeping)
     }
 
     fun rescheduleAll(ctx: Context) = CoroutineScope(Dispatchers.IO).launch {
@@ -235,6 +286,14 @@ object Reminders {
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         val action = intent.action ?: return
+
+        if (action == Reminders.ACTION_ICON) {
+            val mood = runCatching { Mood.valueOf(intent.getStringExtra(Reminders.EXTRA_MOOD)!!) }
+                .getOrNull() ?: return
+            IconSwitcher.apply(ctx.applicationContext, mood)
+            return
+        }
+
         val tagId = intent.getStringExtra(Reminders.EXTRA_TAG_ID) ?: return
         val slot = intent.getLongExtra(Reminders.EXTRA_SLOT, 0L)
         val pending = goAsync()

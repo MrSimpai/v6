@@ -1,20 +1,20 @@
 package com.example.medtap
 
 import android.Manifest
-import android.app.NotificationManager
 import android.content.Intent
+import android.app.KeyguardManager
 import android.nfc.NfcAdapter
+import android.os.PowerManager
 import android.nfc.Tag
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
 import com.example.medtap.data.*
-import com.example.medtap.reminder.IconSwitcher
 import com.example.medtap.reminder.Reminders
 import com.example.medtap.ui.*
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +28,8 @@ class MainActivity : ComponentActivity() {
     private var nfc: NfcAdapter? = null
     private val state = mutableStateOf(HomeState())
     private var pendingMed: Medication? = null      // waiting to be bound to a fresh tag
+
+    @Volatile private var resumed = false
 
     private val askNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -43,15 +45,27 @@ class MainActivity : ComponentActivity() {
         setContent {
             MedTapTheme {
                 var showAdd by remember { mutableStateOf(false) }
+                // Explicit Box: the celebration has to sit ON TOP of the home screen,
+                // not be laid out beside it.
+                androidx.compose.foundation.layout.Box(
+                    androidx.compose.ui.Modifier.fillMaxSize()
+                ) {
                 HomeScreen(
                     state = state.value,
                     onAddMedication = { showAdd = true },
                     onMarkTaken = { med -> logDose(med) },
+                    onForget = { med -> forget(med) },
                     onCancelPairing = {
                         pendingMed = null
                         state.value = state.value.copy(pairing = false)
                     }
                 )
+                state.value.streakOverlay?.let { days ->
+                    StreakCelebration(
+                        days = days,
+                        onDismiss = { state.value = state.value.copy(streakOverlay = null) }
+                    )
+                }
                 if (showAdd) AddMedicationSheet(
                     onDismiss = { showAdd = false },
                     onConfirm = { draft, pairWithTag ->
@@ -65,6 +79,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 )
+                }
             }
         }
         handleTagIntent(intent)
@@ -88,17 +103,51 @@ class MainActivity : ComponentActivity() {
         val slot = Slots.todayAt(med)
         if (dao.logForSlot(med.tagId, slot) != null) return@launch   // already logged today
         dao.insert(DoseLog(tagId = med.tagId, scheduledFor = slot, takenAt = System.currentTimeMillis()))
-        Reminders.resolve(this@MainActivity, med, slot, streakFor(dao, med))
+        Reminders.resolve(this@MainActivity, med, slot)
 
-        withContext(Dispatchers.Main) { state.value = state.value.copy(justLogged = med) }
-        delay(4000)
-        withContext(Dispatchers.Main) { state.value = state.value.copy(justLogged = null) }
+        // Is this the last dose of the day? Counting every medication scheduled today,
+        // not only the ones already due -- a 9pm pill still outstanding means the day is
+        // not finished, however early it is.
+        val meds = dao.activeMedsOnce()
+        val complete = meds.all { dao.logForSlot(it.tagId, Slots.todayAt(it)) != null }
+        val days = if (complete) perfectDayStreak(dao, meds) else 0
+
+        val inApp = withContext(Dispatchers.Main) { watchingNow() }
+
+        if (inApp) {
+            withContext(Dispatchers.Main) {
+                state.value = state.value.copy(
+                    justLogged = med,
+                    dayComplete = complete,
+                    streakOverlay = if (complete && days > 0) days else null
+                )
+            }
+            delay(4000)
+            withContext(Dispatchers.Main) {
+                state.value = state.value.copy(justLogged = null, dayComplete = false)
+            }
+        } else {
+            // Phone asleep on the counter, tag tapped against the bottle. The news has to
+            // survive until she picks it up, so it goes out as a notification instead.
+            Reminders.celebrate(
+                this@MainActivity, med, slot, streakFor(dao, med), if (complete) days else 0
+            )
+        }
+    }
+
+    /** Remove a medication and its history. Alarms first, so nothing fires into a void. */
+    private fun forget(med: Medication) = lifecycleScope.launch(Dispatchers.IO) {
+        Reminders.cancelAll(this@MainActivity, med)
+        val dao = Db.get(this@MainActivity).dao()
+        dao.deleteLogs(med.tagId)
+        dao.deleteMed(med.tagId)
     }
 
     // ---- NFC ---------------------------------------------------------------
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         state.value = state.value.copy(nfcOff = nfc != null && !nfc!!.isEnabled)
         // Reader mode beats foreground dispatch: no intent round-trip, and it suppresses
         // the system's own tag-discovered sound so the app owns the feedback.
@@ -115,13 +164,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        resumed = false
         nfc?.disableReaderMode(this)
     }
 
-    /** The only moment it is safe to repaint the launcher icon: nothing is on screen. */
-    override fun onStop() {
-        super.onStop()
-        IconSwitcher.flushOnLeave(this)
+    /**
+     * Is she actually watching, right now?
+     *
+     * `resumed` alone isn't enough: a tag held against a sleeping phone launches this
+     * activity, which resumes behind the lock screen. So the screen has to be on and the
+     * keyguard down as well -- that combination is what "elle regarde l'app" really means,
+     * and it decides between the full-screen celebration and a notification.
+     */
+    private fun watchingNow(): Boolean {
+        val pm = getSystemService(PowerManager::class.java)
+        val km = getSystemService(KeyguardManager::class.java)
+        return resumed && pm.isInteractive && !km.isKeyguardLocked
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -160,14 +218,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Consecutive days ending today that have a logged dose. */
+    /** Consecutive days ending today where this one medication was logged. */
     private suspend fun streakFor(dao: MedDao, med: Medication): Int {
         var n = 0
-        var slot = Slots.todayAt(med)
-        while (dao.logForSlot(med.tagId, slot) != null) {
-            n++
-            slot -= 24L * 60 * 60 * 1000
-        }
+        while (dao.logForSlot(med.tagId, Slots.slotDaysAgo(med, n)) != null) n++
+        return n
+    }
+
+    /** Consecutive days ending today where *every* medication was logged. */
+    private suspend fun perfectDayStreak(dao: MedDao, meds: List<Medication>): Int {
+        if (meds.isEmpty()) return 0
+        var n = 0
+        while (n < 3650 && meds.all { dao.logForSlot(it.tagId, Slots.slotDaysAgo(it, n)) != null }) n++
         return n
     }
 
@@ -195,17 +257,10 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        // Android 14 revoked full-screen intents for apps outside the alarm/calling
-        // category. Without it the reminder still posts, it just cannot wake the
-        // lock screen -- so send the user to the one toggle that restores it.
-        if (Build.VERSION.SDK_INT >= 34) {
-            val nm = getSystemService(NotificationManager::class.java)
-            if (!nm.canUseFullScreenIntent()) {
-                startActivity(
-                    Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
-                        .setData(android.net.Uri.parse("package:$packageName"))
-                )
-            }
-        }
+        // Nothing else. An earlier version also asked for the full-screen-intent
+        // permission and pushed the user into a Settings screen on first launch, to let
+        // the reminder wake the lock screen. A high-importance notification that bypasses
+        // Do Not Disturb and re-posts every ten minutes is already impossible to miss;
+        // taking over the screen on top of that was hostile.
     }
 }

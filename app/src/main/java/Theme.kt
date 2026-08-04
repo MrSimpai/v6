@@ -29,6 +29,7 @@ object Pal {
     val Teal     = Color(0xFF94C9CF)   // accent froid, repris de l'icône
     val Butter   = Color(0xFFF2C48A)
     val Blush    = Color(0xFFF1BBCB)
+    val Danger   = Color(0xFFB3324B)   // retrait d'un médicament, rien d'autre
 }
 
 val Soft = RoundedCornerShape(28.dp)

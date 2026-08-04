@@ -15,10 +15,10 @@ import com.example.medtap.ui.Mood
  * happens -- `DONT_KILL_APP` is a request, not a guarantee. If it fires while she is
  * looking at the app, the app vanishes under her and it looks like the phone crashed.
  *
- * So there are two entry points, and the difference matters:
- *  - [apply] changes it immediately. Only safe from a broadcast receiver, with no UI up.
- *  - [requestOnLeave] + [flushOnLeave] defer the change until she leaves the app, which
- *    is the only moment a launcher icon matters anyway.
+ * So [apply] is only ever called from ReminderReceiver, never from the UI. When a dose
+ * is logged in the app, Reminders schedules an ACTION_ICON alarm a minute out instead of
+ * repainting on the spot -- late enough that she has left, and that the launcher is idle
+ * rather than mid-animation.
  *
  * There is deliberately no "just logged" icon. It would be a four-second state on a
  * surface she isn't even looking at, bought at the price of two swaps in four seconds.
@@ -35,18 +35,6 @@ object IconSwitcher {
 
     /** Every alias we own, including the retired ".Happy", so a stale one gets cleared. */
     private val allAliases = listOf(".Calm", ".Waiting", ".Overdue", ".Happy")
-
-    @Volatile private var pending: Mood? = null
-
-    /** Queue a change for when the UI goes away. Safe to call from the foreground. */
-    fun requestOnLeave(mood: Mood) { pending = mood }
-
-    /** Call from Activity.onStop(): nothing is on screen, so nothing can be killed. */
-    fun flushOnLeave(ctx: Context) {
-        val mood = pending ?: return
-        pending = null
-        apply(ctx, mood)
-    }
 
     fun apply(ctx: Context, mood: Mood) {
         val want = aliases[mood] ?: return

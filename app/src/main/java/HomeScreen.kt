@@ -27,6 +27,8 @@ data class HomeState(
     val logs: List<DoseLog> = emptyList(),
     val takenSlots: Set<Pair<String, Long>> = emptySet(),
     val justLogged: Medication? = null,
+    val dayComplete: Boolean = false,   // toutes les doses du jour sont enregistrées
+    val streakOverlay: Int? = null,     // jours à fêter en plein écran, sinon null
     val pairing: Boolean = false,
     val hasNfc: Boolean = true,
     val nfcOff: Boolean = false
@@ -45,10 +47,16 @@ fun HomeScreen(
     state: HomeState,
     onAddMedication: () -> Unit,
     onMarkTaken: (Medication) -> Unit,
+    onForget: (Medication) -> Unit,
     onCancelPairing: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val now = System.currentTimeMillis()
+
+    // Which row is mid-removal. Held here rather than in the row so that opening a second
+    // confirmation closes the first -- two armed delete buttons at once is how you tap
+    // the wrong one.
+    var confirmingRemoval by remember { mutableStateOf<String?>(null) }
 
     // A dose is owed once its slot has passed and nothing has been logged against it.
     val owed = state.meds.filter { med ->
@@ -82,6 +90,7 @@ fun HomeScreen(
         Spacer(Modifier.height(6.dp))
         Text(
             when {
+                state.dayComplete -> "Journée complète, ${Her.name}"
                 state.justLogged != null -> "C'est noté, ${Her.name}"
                 mood == Mood.Overdue -> "${Her.realName}, c'est vraiment en retard"
                 owed.size == 1 -> "${owed[0].name} t'attend"
@@ -139,6 +148,10 @@ fun HomeScreen(
                 taken = taken,
                 due = slot <= now,
                 loggable = Slots.canLogNow(med),
+                confirmingRemoval = confirmingRemoval == med.tagId,
+                onAskRemove = { confirmingRemoval = med.tagId },
+                onCancelRemove = { confirmingRemoval = null },
+                onConfirmRemove = { confirmingRemoval = null; onForget(med) },
                 log = state.logs.firstOrNull { it.tagId == med.tagId && it.scheduledFor == slot },
                 onMarkTaken = { onMarkTaken(med) }
             )
@@ -206,6 +219,10 @@ private fun MedRow(
     due: Boolean,
     loggable: Boolean,
     log: DoseLog?,
+    confirmingRemoval: Boolean,
+    onAskRemove: () -> Unit,
+    onCancelRemove: () -> Unit,
+    onConfirmRemove: () -> Unit,
     onMarkTaken: () -> Unit
 ) {
     Surface(
@@ -253,6 +270,43 @@ private fun MedRow(
                         "Ou approche le téléphone de l'étiquette sur la bouteille.",
                         style = Type.Label, color = Pal.Muted
                     )
+                }
+            }
+
+            // Removal is two deliberate taps, and the second one is never in the place
+            // the first one was -- so a double tap on "Retirer" cannot delete anything.
+            Spacer(Modifier.height(8.dp))
+            if (!confirmingRemoval) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onAskRemove) {
+                        Text("Retirer", style = Type.Label, color = Pal.Muted)
+                    }
+                }
+            } else {
+                Surface(color = Pal.Mist, shape = RoundedCornerShape(16.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text("Retirer ${med.name} ?", style = Type.Title, color = Pal.Ink)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Son historique est effacé avec, et ça ne se défait pas.",
+                            style = Type.Label, color = Pal.Muted
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Row(Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = onCancelRemove,
+                                shape = Pill,
+                                modifier = Modifier.weight(1f).height(46.dp)
+                            ) { Text("Annuler", style = Type.Label, color = Pal.Ink) }
+                            Spacer(Modifier.width(10.dp))
+                            Button(
+                                onClick = onConfirmRemove,
+                                shape = Pill,
+                                colors = ButtonDefaults.buttonColors(containerColor = Pal.Danger),
+                                modifier = Modifier.weight(1f).height(46.dp)
+                            ) { Text("Oui, retirer", style = Type.Label) }
+                        }
+                    }
                 }
             }
         }

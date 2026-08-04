@@ -73,6 +73,12 @@ interface MedDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(log: DoseLog): Long
+
+    @Query("DELETE FROM DoseLog WHERE tagId = :tagId")
+    suspend fun deleteLogs(tagId: String)
+
+    @Query("DELETE FROM Medication WHERE tagId = :tagId")
+    suspend fun deleteMed(tagId: String)
 }
 
 @Database(entities = [Medication::class, DoseLog::class], version = 1)
@@ -118,6 +124,17 @@ object Slots {
     /** Today's dose time, whether or not it has already passed. */
     fun todayAt(med: Medication, now: Long = System.currentTimeMillis()): Long =
         atTimeOn(med, now).timeInMillis
+
+    /**
+     * The same medication's slot [days] days ago.
+     *
+     * This walks the calendar rather than subtracting 86_400_000 ms, because slots are
+     * stored as local wall-clock times. On the two DST changeovers a day is 23 or 25
+     * hours long, so millisecond arithmetic lands an hour off, finds no log, and silently
+     * resets a streak of any length back to one. Twice a year, invisibly.
+     */
+    fun slotDaysAgo(med: Medication, days: Int, now: Long = System.currentTimeMillis()): Long =
+        atTimeOn(med, now).apply { add(Calendar.DAY_OF_YEAR, -days) }.timeInMillis
 
     /** True once the dose is due, or within [EARLY_WINDOW] of being due. */
     fun canLogNow(med: Medication, now: Long = System.currentTimeMillis()): Boolean =

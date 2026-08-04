@@ -61,7 +61,17 @@ familiar and contracted, `SERIEUX` is plain, unhurried standard French.
   talking to you* rather than a system message. See `reminder/NotifArt.kt`.
 - **The dragon's face as the large icon**, cropped round, matching her current mood.
 - **Colorized** notification tinted to the dragon's pink (plum in the serious tier).
-- **It does not go away.** See below.
+- **It does not go away.** Ongoing, non-swipeable, with a `deleteIntent` that re-posts it.
+
+What it deliberately does *not* do is take over the screen. An earlier version set
+`showWhenLocked` + `turnScreenOn` on the activity and gave the reminder a full-screen
+intent, so it could wake the lock screen. Two problems. `turnScreenOn` applies every time
+the activity resumes, not just when a reminder fires -- so pressing the power button
+while the app was open turned the screen straight back on, in a loop. And a
+high-importance notification that bypasses Do Not Disturb and re-posts every ten minutes
+is already impossible to ignore; seizing the display on top of that was hostile, not
+persistent. It also meant shoving her into a Settings screen on first launch to grant
+`USE_FULL_SCREEN_INTENT`. All of it is gone.
 - **A new line every re-post**, seeded on the slot so a dismissal doesn't reshuffle it.
 
 ## The app icon changes with her mood
@@ -89,10 +99,15 @@ the package, and plenty of OEM launchers force-stop the app when that happens --
 `DONT_KILL_APP` is a request, not a guarantee. Fire it while she's looking at the screen
 and the app vanishes under her, which reads as the phone crashing.
 
-So `IconSwitcher` has two entry points. `apply()` changes it now, and is only called from
-the alarm receiver, where no UI is up. `requestOnLeave()` queues the change and
-`flushOnLeave()` runs it from `MainActivity.onStop()` -- which is fine, because a launcher
-icon only matters once you're back at the launcher.
+So `apply()` is only ever called from `ReminderReceiver`. Nothing in the UI touches it.
+When a dose is logged in the app, `Reminders` schedules an `ACTION_ICON` alarm a minute
+out instead of repainting on the spot.
+
+The minute is the point. Doing it in `onStop()` seemed right -- she's leaving, nothing on
+screen -- but that's the exact moment the launcher is drawing itself, so the redraw landed
+in full view and looked like the phone restarting. A minute later she's moved on and the
+home screen is idle, where a brief icon flicker is unremarkable. The alarm is `RTC`, not
+`RTC_WAKEUP`: waking a sleeping phone to repaint an icon would be absurd.
 
 Lesser caveats: some launchers briefly drop the icon during a swap and a few reset its
 home screen position, so `apply` bails out early if the desired alias is already enabled.
@@ -180,6 +195,50 @@ both block `.apk` attachments outright. She'll tap through "this file can harm y
 Protect "**Install anyway**". Warn her those warnings are expected; they're alarming if
 you don't know they're coming. (Play internal testing avoids all of that, but costs $25
 and needs a review — worth it if this becomes permanent.)
+
+## Streaks
+
+Two different numbers, in two different places.
+
+The **notification** that confirms a dose shows that medication's own run of consecutive
+days. The **app** shows a card only when the last dose of the day lands -- counting whole
+days where nothing at all was missed. That second number is the one worth being proud of,
+and it's why it waits for the day to actually be finished: a 9pm pill still outstanding
+means the day isn't done, however early it is.
+
+Both walk backwards with `Calendar.add(DAY_OF_YEAR, -1)` rather than subtracting
+86_400_000 ms. Slots are stored as local wall-clock times, and on the two DST changeovers
+a day is 23 or 25 hours long -- millisecond arithmetic lands an hour off, finds no log,
+and silently resets a streak of any length to one. Twice a year, invisibly.
+
+### Where the celebration lands
+
+The last dose of the day gets a different treatment depending on where she is when it
+happens, because the same news needs a different shape in each place.
+
+**Logged in the app** -- a full-screen celebration: rotating rays, confetti, the number
+rolling up from zero, the dragon cheering, a week of dots, and a **Continuer** button. It
+is dismissed by hand rather than on a timer. An animation that vanishes on its own is
+something that happened *at* you; one you close is something you finished.
+
+**Logged with a tag while the phone is asleep** -- a notification, because there is no
+screen to celebrate on and the news has to survive until she picks the phone up.
+
+Telling those apart takes more than an `isResumed` flag: a tag held against a sleeping
+phone *launches* the activity, which resumes behind the lock screen. So `watchingNow()`
+also requires the display to be on and the keyguard down. When she is watching, no
+notification is posted at all -- the cheering dragon on screen is already the message,
+and a notification on top would be the same news twice.
+
+## Removing a medication
+
+Two deliberate taps. **Retirer** replaces the row's footer with a confirmation panel, and
+**Oui, retirer** sits somewhere the first button wasn't -- so a double tap can't delete
+anything. Only one row can be armed at a time; opening a second confirmation closes the
+first, because two live delete buttons is how you tap the wrong one.
+
+It removes the medication *and* its history, and it cancels the pending alarms before
+touching the database, so nothing fires into a void afterwards.
 
 ## Hardware (optional)
 
