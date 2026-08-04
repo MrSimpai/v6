@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.MedTap" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FDF3F6</item>
+        <item name="android:statusBarColor">#FDF3F6</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

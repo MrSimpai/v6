@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Le seul texte qui doit vivre en ressource : Android lit le nom du lanceur
+         avant que le moindre Kotlin ne s'exécute. Le reste est dans Personal.kt. -->
+    <string name="app_name">Le dragon de Flo</string>
+</resources>

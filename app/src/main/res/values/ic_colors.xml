@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fonds d'icône, repris de l'illustration : le sarcelle est celui de la référence. -->
+    <color name="icbg_calm">#94C9CF</color>
+    <color name="icbg_happy">#9BD6C0</color>
+    <color name="icbg_overdue">#CE7A72</color>
+    <color name="icbg_waiting">#F3C6A0</color>
+</resources>
