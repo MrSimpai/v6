@@ -1,0 +1,85 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # requis pour publier la Release
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # Le contexte `secrets` n'est pas fiable dans un `if` d'étape : on le sonde
+      # une fois vers une sortie. Pas de keystore ? On produit quand même un APK debug.
+      - name: Vérifier le keystore
+        id: ks
+        env:
+          KS: ${{ secrets.KEYSTORE_B64 }}
+        run: echo "has=${KS:+yes}" >> "$GITHUB_OUTPUT"
+
+      - name: Restaurer le keystore
+        if: steps.ks.outputs.has == 'yes'
+        env:
+          KS: ${{ secrets.KEYSTORE_B64 }}
+        run: echo "$KS" | base64 -d > keystore.jks
+
+      - name: Construire l'APK signé
+        if: steps.ks.outputs.has == 'yes'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --no-daemon
+
+      - name: Construire l'APK debug
+        if: steps.ks.outputs.has != 'yes'
+        run: gradle :app:assembleDebug --no-daemon
+
+      # Un seul fichier, un seul nom. On échoue bruyamment si le build en a craché
+      # plusieurs, plutôt que d'en envoyer un au hasard.
+      - name: Isoler l'APK unique
+        run: |
+          mapfile -t found < <(find app/build/outputs/apk -name '*.apk' | sort)
+          echo "APK trouvés : ${#found[@]}"
+          printf '%s\n' "${found[@]}"
+          if [ "${#found[@]}" -ne 1 ]; then
+            echo "::error::Attendu 1 APK, obtenu ${#found[@]}"
+            exit 1
+          fi
+          mkdir -p out
+          cp "${found[0]}" out/MedTap-Flo.apk
+          ls -lh out/MedTap-Flo.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MedTap-Flo
+          path: out/MedTap-Flo.apk
+          retention-days: 90
+
+      # C'est ça, le lien à envoyer à Flo : un .apk direct, pas un .zip.
+      - name: Publier la Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: MedTap v1.0.${{ github.run_number }}
+          body: |
+            APK unique — ${{ steps.ks.outputs.has == 'yes' && 'signé (release)' || 'debug' }}.
+            Ouvre ce lien sur le téléphone et touche MedTap-Flo.apk pour installer.
+          files: out/MedTap-Flo.apk
+          make_latest: true
