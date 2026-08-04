@@ -52,12 +52,12 @@ fun HomeScreen(
 
     // A dose is owed once its slot has passed and nothing has been logged against it.
     val owed = state.meds.filter { med ->
-        val slot = Slots.currentOrPrevious(med)
+        val slot = Slots.todayAt(med)
         slot <= now && (med.tagId to slot) !in state.takenSlots
     }
 
     // How late is the most overdue thing? That drives the dragon's face.
-    val worstLateMin = owed.maxOfOrNull { (now - Slots.currentOrPrevious(it)) / 60_000L } ?: 0L
+    val worstLateMin = owed.maxOfOrNull { (now - Slots.todayAt(it)) / 60_000L } ?: 0L
     val mood = when {
         state.justLogged != null -> Mood.Cheering
         worstLateMin >= 120 -> Mood.Overdue
@@ -132,12 +132,13 @@ fun HomeScreen(
         Spacer(Modifier.height(10.dp))
 
         state.meds.forEach { med ->
-            val slot = Slots.currentOrPrevious(med)
+            val slot = Slots.todayAt(med)
             val taken = (med.tagId to slot) in state.takenSlots
             MedRow(
                 med = med,
                 taken = taken,
                 due = slot <= now,
+                loggable = Slots.canLogNow(med),
                 log = state.logs.firstOrNull { it.tagId == med.tagId && it.scheduledFor == slot },
                 onMarkTaken = { onMarkTaken(med) }
             )
@@ -203,6 +204,7 @@ private fun MedRow(
     med: Medication,
     taken: Boolean,
     due: Boolean,
+    loggable: Boolean,
     log: DoseLog?,
     onMarkTaken: () -> Unit
 ) {
@@ -233,7 +235,10 @@ private fun MedRow(
                 )
             }
 
-            if (!taken) {
+            // The button only appears once the dose is due, or nearly. Offering it at
+            // 4am for a 9am dose invites logging today's pill in the middle of the
+            // night, which would then silence the morning reminder.
+            if (!taken && loggable) {
                 Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = onMarkTaken,

@@ -88,8 +88,20 @@ abstract class Db : RoomDatabase() {
     }
 }
 
-/** A "slot" is the exact millisecond a dose was due. */
+/**
+ * A "slot" is the exact millisecond a dose was due.
+ *
+ * Everything the user sees keys on TODAY's slot and nothing else. An earlier version
+ * asked for "the current slot, or yesterday's if today's is more than 2h away", which
+ * quietly meant that at 4am a 9am dose resolved to *yesterday* -- unlogged, nineteen
+ * hours old, so the screen announced a dose was critically overdue when it was actually
+ * five hours in the future. Yesterday is not recoverable and should never drive today's
+ * screen.
+ */
 object Slots {
+    /** How early a dose may be logged before it's actually due. */
+    const val EARLY_WINDOW = 2 * 60 * 60 * 1000L
+
     private fun atTimeOn(med: Medication, base: Long) = Calendar.getInstance().apply {
         timeInMillis = base
         set(Calendar.HOUR_OF_DAY, med.hourOfDay)
@@ -103,10 +115,11 @@ object Slots {
         return c.timeInMillis
     }
 
-    /** The slot a scan right now counts against. Scanning up to 2h early still counts. */
-    fun currentOrPrevious(med: Medication, now: Long = System.currentTimeMillis()): Long {
-        val c = atTimeOn(med, now)
-        if (c.timeInMillis - now > 2 * 60 * 60 * 1000L) c.add(Calendar.DAY_OF_YEAR, -1)
-        return c.timeInMillis
-    }
+    /** Today's dose time, whether or not it has already passed. */
+    fun todayAt(med: Medication, now: Long = System.currentTimeMillis()): Long =
+        atTimeOn(med, now).timeInMillis
+
+    /** True once the dose is due, or within [EARLY_WINDOW] of being due. */
+    fun canLogNow(med: Medication, now: Long = System.currentTimeMillis()): Boolean =
+        now >= todayAt(med, now) - EARLY_WINDOW
 }

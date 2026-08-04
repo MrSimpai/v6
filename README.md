@@ -71,20 +71,32 @@ Android can't repaint a launcher icon at runtime, but it *can* swap which
 
 | State | Icon |
 |---|---|
-| nothing due | teal, eyes closed, sleeping |
-| dose owed | apricot, wide eyes, holding a pill |
+| nothing due, or dose just logged | teal, eyes closed, sleeping |
+| dose owed (incl. 1h late) | apricot, wide eyes, holding a pill |
 | 2h+ overdue | terracotta, lowered brows, frowning |
-| just logged | mint, happy arcs, sparkles |
+
+There is deliberately **no** "just logged" icon, though `ic_launcher_happy` is still in
+the tree. It was a four-second state on a surface she isn't looking at -- she's inside
+the app -- and it cost two alias swaps in four seconds. See below for why that matters.
 
 The backgrounds are picked for contrast as much as for mood. An earlier draft put the
 overdue dragon on dark plum, which looked appropriately grim and also made a crimson
 dragon almost invisible at launcher size; terracotta keeps her readable while still
 reading as the alarming one of the four.
 
-Caveats: some launchers briefly drop the icon during a swap and a few reset its home
-screen position, so `IconSwitcher` bails out early if the desired alias is already
-enabled. All state lives in Room and AlarmManager, so an alias-triggered restart is
-harmless.
+**The swap can kill the app.** `setComponentEnabledSetting` makes the launcher re-query
+the package, and plenty of OEM launchers force-stop the app when that happens --
+`DONT_KILL_APP` is a request, not a guarantee. Fire it while she's looking at the screen
+and the app vanishes under her, which reads as the phone crashing.
+
+So `IconSwitcher` has two entry points. `apply()` changes it now, and is only called from
+the alarm receiver, where no UI is up. `requestOnLeave()` queues the change and
+`flushOnLeave()` runs it from `MainActivity.onStop()` -- which is fine, because a launcher
+icon only matters once you're back at the launcher.
+
+Lesser caveats: some launchers briefly drop the icon during a swap and a few reset its
+home screen position, so `apply` bails out early if the desired alias is already enabled.
+All state lives in Room and AlarmManager, so a restart is otherwise harmless.
 
 ## One drawing, three places
 

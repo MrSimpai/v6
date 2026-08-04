@@ -17,7 +17,6 @@ import com.example.medtap.data.*
 import com.example.medtap.reminder.IconSwitcher
 import com.example.medtap.reminder.Reminders
 import com.example.medtap.ui.*
-import com.example.medtap.ui.Mood
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -85,14 +84,14 @@ class MainActivity : ComponentActivity() {
      */
     private fun logDose(med: Medication) = lifecycleScope.launch(Dispatchers.IO) {
         val dao = Db.get(this@MainActivity).dao()
-        val slot = Slots.currentOrPrevious(med)
+        if (!Slots.canLogNow(med)) return@launch      // too early to count for today
+        val slot = Slots.todayAt(med)
         if (dao.logForSlot(med.tagId, slot) != null) return@launch   // already logged today
         dao.insert(DoseLog(tagId = med.tagId, scheduledFor = slot, takenAt = System.currentTimeMillis()))
         Reminders.resolve(this@MainActivity, med, slot, streakFor(dao, med))
 
         withContext(Dispatchers.Main) { state.value = state.value.copy(justLogged = med) }
         delay(4000)
-        IconSwitcher.apply(this@MainActivity, Mood.Sleeping)
         withContext(Dispatchers.Main) { state.value = state.value.copy(justLogged = null) }
     }
 
@@ -117,6 +116,12 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         nfc?.disableReaderMode(this)
+    }
+
+    /** The only moment it is safe to repaint the launcher icon: nothing is on screen. */
+    override fun onStop() {
+        super.onStop()
+        IconSwitcher.flushOnLeave(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -158,7 +163,7 @@ class MainActivity : ComponentActivity() {
     /** Consecutive days ending today that have a logged dose. */
     private suspend fun streakFor(dao: MedDao, med: Medication): Int {
         var n = 0
-        var slot = Slots.currentOrPrevious(med)
+        var slot = Slots.todayAt(med)
         while (dao.logForSlot(med.tagId, slot) != null) {
             n++
             slot -= 24L * 60 * 60 * 1000

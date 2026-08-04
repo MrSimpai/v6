@@ -28,7 +28,7 @@ data class DayPoint(val label: String, val slot: Long, val log: DoseLog?)
 /** Builds the last [days] slots for a medication, paired with the log that filled each. */
 fun buildDays(med: Medication, logs: List<DoseLog>, days: Int = 14): List<DayPoint> {
     val bySlot = logs.filter { it.tagId == med.tagId }.associateBy { it.scheduledFor }
-    val today = Slots.currentOrPrevious(med)
+    val today = Slots.todayAt(med)
     val names = arrayOf("D", "L", "M", "M", "J", "V", "S")
     return (days - 1 downTo 0).map { back ->
         val c = Calendar.getInstance().apply {

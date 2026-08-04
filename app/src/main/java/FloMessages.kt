@@ -127,7 +127,7 @@ object FloMessages {
         val title = PRIS[Random(seed).nextInt(PRIS.size)]
         val body = when {
             streak <= 1 -> "Enregistré. À la prochaine."
-            streak < 7  -> "$streak jours de suite. Je compte, ${Her.name}."
+            streak < 7  -> "$streak jours de suite. Je tiens le compte, ${Her.name}."
             streak < 30 -> "Série de $streak jours. Franchement impressionnant."
             else        -> "$streak jours. ${Her.name}, tu es une machine et je t'adore."
         }

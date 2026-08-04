@@ -179,7 +179,6 @@ object Reminders {
         NotificationManagerCompat.from(ctx).cancel(notifId(med.tagId))
         cancelNag(ctx, med, slot)
         scheduleNext(ctx, med)
-        IconSwitcher.apply(ctx, Mood.Cheering)
 
         val line = FloMessages.celebration(streak, slot)
         val yay = NotificationCompat.Builder(ctx, CHANNEL_YAY)
@@ -194,12 +193,16 @@ object Reminders {
             )
             .setColor(0xFF3FA98D.toInt())
             .setColorized(true)
-            .setTimeoutAfter(9_000)      // it congratulates, then gets out of the way
+            .setTimeoutAfter(45_000)     // long enough to actually read it
             .setAutoCancel(true)
             .build()
         if (NotificationManagerCompat.from(ctx).areNotificationsEnabled()) {
             NotificationManagerCompat.from(ctx).notify(notifId(med.tagId) + 1, yay)
         }
+
+        // resolve() is only ever reached from the UI, so the launcher icon waits until
+        // she closes the app. Swapping it here would kill the app under her.
+        IconSwitcher.requestOnLeave(Mood.Sleeping)
     }
 
     fun rescheduleAll(ctx: Context) = CoroutineScope(Dispatchers.IO).launch {
@@ -211,7 +214,9 @@ object Reminders {
             try {
                 val dao = Db.get(ctx).dao()
                 val med = dao.med(tagId) ?: return@launch
-                if (dao.logForSlot(tagId, slot) != null) {
+                // Past midnight the slot this alarm belongs to is yesterday's, and
+                // yesterday is not recoverable. Clear it and wait for today's.
+                if (slot != Slots.todayAt(med) || dao.logForSlot(tagId, slot) != null) {
                     NotificationManagerCompat.from(ctx).cancel(notifId(tagId))
                     cancelNag(ctx, med, slot); scheduleNext(ctx, med)
                     return@launch
