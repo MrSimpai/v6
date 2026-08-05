@@ -308,7 +308,12 @@ object Reminders {
             .setOngoing(true)
             .setAutoCancel(false)
             .setOnlyAlertOnce(!alertAgain)
-            .setShowWhen(true).setWhen(slot)
+            // Le compte à rebours vers minuit, tenu par le système, directement sur le
+            // rappel. Duolingo ne dit pas « il te reste du temps », il le montre fondre.
+            .setShowWhen(true)
+            .setWhen(midnightTonight())
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
             .setContentIntent(open)
             .setDeleteIntent(repost)
             .addAction(

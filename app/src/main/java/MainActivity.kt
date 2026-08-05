@@ -12,6 +12,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
 import com.example.medtap.data.*
@@ -50,6 +52,16 @@ class MainActivity : ComponentActivity() {
                 androidx.compose.foundation.layout.Box(
                     androidx.compose.ui.Modifier.fillMaxSize()
                 ) {
+                // Deux pages, l'accueil au départ : le casier se trouve en glissant vers
+                // la droite, comme le casier de Clash Royale. Il n'a pas d'onglet parce
+                // qu'il ne doit jamais concurrencer la seule chose qui compte, la dose.
+                val pager = rememberPagerState(initialPage = 1) { 2 }
+                HorizontalPager(state = pager, modifier = androidx.compose.ui.Modifier.fillMaxSize()) { page ->
+                    if (page == 0) LockerScreen(
+                        owned = state.value.owned,
+                        worn = state.value.worn,
+                        onToggle = { id -> toggleCosmetic(id) }
+                    ) else
                 HomeScreen(
                     state = state.value,
                     onAddMedication = { showAdd = true },
@@ -60,11 +72,23 @@ class MainActivity : ComponentActivity() {
                         state.value = state.value.copy(pairing = false)
                     }
                 )
+                }
                 state.value.streakOverlay?.let { days ->
                     StreakCelebration(
                         days = days,
-                        onDismiss = { state.value = state.value.copy(streakOverlay = null) }
+                        onDismiss = {
+                            state.value = state.value.copy(streakOverlay = null)
+                            grantDailyCosmetic()
+                        }
                     )
+                }
+                state.value.chestReward?.let { id ->
+                    Cosmetics.byId(id)?.let { item ->
+                        ChestScreen(
+                            cosmetic = item,
+                            onDone = { state.value = state.value.copy(chestReward = null) }
+                        )
+                    }
                 }
                 if (showAdd) AddMedicationSheet(
                     onDismiss = { showAdd = false },
@@ -133,6 +157,35 @@ class MainActivity : ComponentActivity() {
                 this@MainActivity, med, slot, streakFor(dao, med), if (complete) days else 0
             )
         }
+    }
+
+    /**
+     * Une pièce par journée complète, jamais deux le même jour, jamais deux fois la même.
+     *
+     * La pièce est écrite en base AVANT que le coffre s'affiche : si l'app est tuée
+     * pendant l'animation, le cadeau est déjà acquis. L'inverse -- accorder à la fermeture
+     * -- ferait perdre la récompense exactement au moment le plus frustrant.
+     */
+    private fun grantDailyCosmetic() = lifecycleScope.launch(Dispatchers.IO) {
+        val dao = Db.get(this@MainActivity).dao()
+        val already = dao.cosmeticsOnce()
+        val startOfDay = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        if (already.any { it.unlockedAt >= startOfDay }) return@launch      // déjà servi
+
+        val next = Cosmetics.nextLocked(already.map { it.id }.toSet()) ?: return@launch
+        dao.grant(OwnedCosmetic(next.id, System.currentTimeMillis()))
+        withContext(Dispatchers.Main) {
+            state.value = state.value.copy(chestReward = next.id)
+        }
+    }
+
+    private fun toggleCosmetic(id: String) = lifecycleScope.launch(Dispatchers.IO) {
+        val current = Db.get(this@MainActivity).dao().cosmeticsOnce()
+            .firstOrNull { it.id == id } ?: return@launch
+        Db.get(this@MainActivity).dao().setEquipped(id, !current.equipped)
     }
 
     /** Remove a medication and its history. Alarms first, so nothing fires into a void. */
@@ -232,14 +285,18 @@ class MainActivity : ComponentActivity() {
         val dao = Db.get(this).dao()
         val since = System.currentTimeMillis() - 60L * 24 * 60 * 60 * 1000  // 60 days
         lifecycleScope.launch {
-            combine(dao.activeMeds(), dao.logsSince(since)) { meds, logs -> meds to logs }
-                .collect { (meds, logs) ->
+            combine(
+                dao.activeMeds(), dao.logsSince(since), dao.cosmetics()
+            ) { meds, logs, cosmetics -> Triple(meds, logs, cosmetics) }
+                .collect { (meds, logs, cosmetics) ->
                     meds.forEach { Reminders.scheduleNext(this@MainActivity, it) }
                     Reminders.scheduleLastCall(this@MainActivity)
                     state.value = state.value.copy(
                         meds = meds,
                         logs = logs,
-                        takenSlots = logs.map { it.tagId to it.scheduledFor }.toSet()
+                        takenSlots = logs.map { it.tagId to it.scheduledFor }.toSet(),
+                        owned = cosmetics.map { it.id }.toSet(),
+                        worn = cosmetics.filter { it.equipped }.map { it.id }.toSet()
                     )
                 }
         }

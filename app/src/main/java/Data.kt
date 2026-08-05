@@ -2,6 +2,8 @@ package com.example.medtap.data
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 import java.util.Calendar
 
@@ -79,7 +81,27 @@ interface MedDao {
 
     @Query("DELETE FROM Medication WHERE tagId = :tagId")
     suspend fun deleteMed(tagId: String)
+
+    @Query("SELECT * FROM OwnedCosmetic")
+    fun cosmetics(): Flow<List<OwnedCosmetic>>
+
+    @Query("SELECT * FROM OwnedCosmetic")
+    suspend fun cosmeticsOnce(): List<OwnedCosmetic>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun grant(c: OwnedCosmetic)
+
+    @Query("UPDATE OwnedCosmetic SET equipped = :on WHERE id = :id")
+    suspend fun setEquipped(id: String, on: Boolean)
 }
+
+/** Une pièce cosmétique gagnée. La table ne grandit jamais que d'une ligne par jour. */
+@Entity
+data class OwnedCosmetic(
+    @PrimaryKey val id: String,
+    val unlockedAt: Long,
+    val equipped: Boolean = true
+)
 
 /**
  * Consecutive days ending today where EVERY medication was logged. Lives here rather than
@@ -97,7 +119,25 @@ suspend fun MedDao.perfectDayStreak(meds: List<Medication>): Int {
 suspend fun MedDao.outstandingToday(meds: List<Medication>): List<Medication> =
     meds.filter { logForSlot(it.tagId, Slots.todayAt(it)) == null }
 
-@Database(entities = [Medication::class, DoseLog::class], version = 1, exportSchema = false)
+/**
+ * Version 2 ajoute la table des cosmétiques. La migration crée simplement la nouvelle
+ * table : surtout pas de `fallbackToDestructiveMigration`, qui effacerait des mois
+ * d'historique pour ajouter un chapeau.
+ */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS OwnedCosmetic (" +
+                "id TEXT NOT NULL, unlockedAt INTEGER NOT NULL, " +
+                "equipped INTEGER NOT NULL, PRIMARY KEY(id))"
+        )
+    }
+}
+
+@Database(
+    entities = [Medication::class, DoseLog::class, OwnedCosmetic::class],
+    version = 2, exportSchema = false
+)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): MedDao
 
@@ -105,6 +145,7 @@ abstract class Db : RoomDatabase() {
         @Volatile private var instance: Db? = null
         fun get(ctx: Context): Db = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "medtap.db")
+                .addMigrations(MIGRATION_1_2)
                 .build().also { instance = it }
         }
     }

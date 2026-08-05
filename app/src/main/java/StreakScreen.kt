@@ -3,6 +3,9 @@ package com.example.medtap.ui
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -167,34 +170,84 @@ fun StreakCelebration(days: Int, onDismiss: () -> Unit) {
             // The hand-written lines vary wildly in length -- "UNE SEMAINE! ça passe
             // vite" next to a full verse of Life Is A Highway. Step the size down for the
             // long ones so a good joke never gets clipped off the bottom of the screen.
+            // La ligne écrite à la main est le vrai contenu de l'écran, donc elle est
+            // dimensionnée comme tel. Trois paliers : les courtes en gros, les longues
+            // seulement un peu plus petites, jamais en dessous du corps de texte.
             val message = FloMessages.dayStreakLine(days)
+            val size = when {
+                message.length <= 34 -> 30.sp
+                message.length <= 70 -> 24.sp
+                else -> 20.sp
+            }
             Text(
                 message,
-                style = if (message.length <= 58) Type.Title else Type.Body,
+                style = Type.Title.copy(
+                    fontSize = size,
+                    lineHeight = size * 1.34f
+                ),
                 color = Pal.Ink,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.alpha(enter.value)
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
-                "Plus rien à prendre aujourd'hui, ${Her.name}. ${Her.dragon} va se coucher.",
+                "Plus rien à prendre aujourd'hui, ${Her.name}.",
                 style = Type.Label, color = Pal.Muted,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.alpha(enter.value)
             )
         }
 
-        Button(
-            onClick = onDismiss,
-            shape = Pill,
-            colors = ButtonDefaults.buttonColors(containerColor = Pal.Mint),
-            modifier = Modifier
+        // Quatre appuis, pas un.
+        //
+        // Le bouton se remplit et vibre un peu plus fort à chaque fois. Ça n'a aucune
+        // utilité fonctionnelle et c'est exactement le but : le coffre attend derrière,
+        // et trois secondes d'effort inutile transforment une transition d'écran en
+        // impatience. Un seul appui rendrait la récompense gratuite.
+        val ctx = LocalContext.current
+        var taps by remember { mutableStateOf(0) }
+        val fill by animateFloatAsState(taps / 4f, tween(220), label = "fill")
+        val nudge = remember { Animatable(1f) }
+
+        Box(
+            Modifier
                 .align(Alignment.BottomCenter)
                 .padding(start = 32.dp, end = 32.dp, bottom = 44.dp)
                 .fillMaxWidth()
                 .height(56.dp)
                 .alpha(enter.value)
-        ) { Text("Continuer", style = Type.Title) }
+                .scale(nudge.value)
+                .clip(Pill)
+                .background(Pal.MintSoft)
+                .clickable(enabled = taps < 4) { taps++ },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(fill.coerceIn(0f, 1f))
+                    .fillMaxHeight()
+                    .align(Alignment.CenterStart)
+                    .background(Pal.Mint)
+            )
+            Text(
+                when (taps) {
+                    0 -> "Continuer"
+                    1, 2 -> "Encore…"
+                    3 -> "Presque!"
+                    else -> "Ouvre!"
+                },
+                style = Type.Title,
+                color = if (taps >= 2) Pal.Card else Pal.Mint
+            )
+        }
+
+        LaunchedEffect(taps) {
+            if (taps == 0) return@LaunchedEffect
+            buzz(ctx, 22L + taps * 16L, 70 + taps * 45)
+            nudge.animateTo(0.94f, tween(70))
+            nudge.animateTo(1f, spring(dampingRatio = 0.35f, stiffness = Spring.StiffnessHigh))
+            if (taps >= 4) onDismiss()
+        }
     }
 }
 

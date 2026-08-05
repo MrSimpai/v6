@@ -34,6 +34,12 @@ object Dragon {
     const val Tear     = 0xFFB9DCE8.toInt()
     const val Shade    = 0xFFCAD1D9.toInt()   // ombre au sol
 
+    // Cosmétiques
+    const val Knit     = 0xFF3FA98D.toInt()   // laine de la tuque
+    const val Wool     = 0xFFFDF6F0.toInt()   // fourrure et pompon
+    const val Xmas     = 0xFFC0392B.toInt()   // rouge du hoodie et des bottes
+    const val XmasDeep = 0xFF8E2B22.toInt()   // ombres du rouge
+
     // Ancien nom conservé pour compatibilité avec le code qui l'utilisait.
     const val Crest    = Blush
 
@@ -56,7 +62,13 @@ object Dragon {
         c.save(); c.translate(220f, 0f); c.scale(-1f, 1f); block(); c.restore()
     }
 
-    fun draw(c: Canvas, mood: Mood, size: Float, phase: Float = 0f) {
+    fun draw(
+        c: Canvas,
+        mood: Mood,
+        size: Float,
+        phase: Float = 0f,
+        worn: Set<String> = emptySet()
+    ) {
         val s = size / 220f
         c.save()
         c.scale(s, s)
@@ -65,12 +77,17 @@ object Dragon {
         p.alpha = 255
         c.save()
         c.translate(0f, -flap * (if (mood == Mood.Cheering) 5f else 2f))
+        val boots = "bottes" in worn
+        val hoodie = "hoodie" in worn
+
         tail(c)
         wing(c, flap); mirrored(c) { wing(c, flap) }
-        leg(c); mirrored(c) { leg(c) }
-        torso(c)
-        arm(c); mirrored(c) { arm(c) }
+        leg(c, boots); mirrored(c) { leg(c, boots) }
+        torso(c, hoodie)
+        arm(c, hoodie); mirrored(c) { arm(c, hoodie) }
+        if (hoodie) hoodCollar(c)
         head(c, mood)
+        if ("tuque" in worn) tuque(c)
         c.restore()
         extras(c, mood)
         c.restore()
@@ -111,23 +128,46 @@ object Dragon {
         c.restore()
     }
 
-    /** Cuisse arrondie plus patte prune à trois orteils. */
-    private fun leg(c: Canvas) {
+    /** Cuisse arrondie plus patte prune à trois orteils, ou une botte par-dessus. */
+    private fun leg(c: Canvas, boot: Boolean) {
         c.drawOval(oval(80f, 164f, 24f, 26f), fill(Pink))
-        Path().apply {
+
+        val foot = Path().apply {
             moveTo(86f, 182f)
             cubicTo(86f, 173f, 74f, 168f, 60f, 169f)
             cubicTo(47f, 170f, 40f, 177f, 40f, 186f)
             cubicTo(40f, 195f, 49f, 200f, 62f, 199f)
             cubicTo(76f, 198f, 86f, 191f, 86f, 182f)
             close()
-        }.also { c.drawPath(it, fill(Plum)) }
-        listOf(175f, 186f, 196f).forEach { c.drawCircle(43f, it, 6.2f, fill(Plum)) }
+        }
+
+        if (!boot) {
+            c.drawPath(foot, fill(Plum))
+            listOf(175f, 186f, 196f).forEach { c.drawCircle(43f, it, 6.2f, fill(Plum)) }
+            return
+        }
+
+        // La botte reprend exactement la silhouette de la patte : elle se lit comme une
+        // chaussure enfilée, pas comme une forme rouge posée à côté.
+        c.drawPath(foot, fill(Xmas))
+        c.drawRoundRect(RectF(36f, 190f, 90f, 201f), 6f, 6f, fill(XmasDeep))   // semelle
+        c.drawRoundRect(RectF(42f, 176f, 88f, 183f), 3.5f, 3.5f, fill(Wool))   // lacet
+        c.drawRoundRect(RectF(40f, 157f, 94f, 174f), 8f, 8f, fill(Wool))       // revers
+        heart(c, 62f, 166f, 5f, Xmas)
+    }
+
+    private fun heart(c: Canvas, cx: Float, cy: Float, r: Float, color: Int) {
+        Path().apply {
+            moveTo(cx, cy + r * 0.85f)
+            cubicTo(cx - r * 1.5f, cy - r * 0.2f, cx - r * 0.5f, cy - r * 1.2f, cx, cy - r * 0.35f)
+            cubicTo(cx + r * 0.5f, cy - r * 1.2f, cx + r * 1.5f, cy - r * 0.2f, cx, cy + r * 0.85f)
+            close()
+        }.also { c.drawPath(it, fill(color)) }
     }
 
     /** Corps en poire : épaules étroites, assise large. Le ventre pâle par-dessus. */
-    private fun torso(c: Canvas) {
-        Path().apply {
+    private fun torso(c: Canvas, hoodie: Boolean) {
+        val shape = Path().apply {
             moveTo(110f, 112f)
             cubicTo(90f, 112f, 80f, 124f, 77f, 142f)
             cubicTo(72f, 163f, 76f, 184f, 88f, 192f)
@@ -135,13 +175,52 @@ object Dragon {
             cubicTo(144f, 184f, 148f, 163f, 143f, 142f)
             cubicTo(140f, 124f, 130f, 112f, 110f, 112f)
             close()
-        }.also { c.drawPath(it, fill(Pink)) }
-        c.drawOval(oval(110f, 166f, 26f, 31f), fill(Belly))
+        }
+        c.drawPath(shape, fill(Pink))
+
+        if (!hoodie) {
+            c.drawOval(oval(110f, 166f, 26f, 31f), fill(Belly))
+            return
+        }
+
+        // Le hoodie est découpé DANS la silhouette du corps, pas dessiné par-dessus :
+        // sinon il déborde et le dragon a l'air d'avoir avalé un rectangle.
+        c.save()
+        c.clipPath(shape)
+        c.drawRect(RectF(60f, 108f, 160f, 184f), fill(Xmas))
+        c.drawRect(RectF(60f, 184f, 160f, 196f), fill(Wool))        // bord côtelé
+        c.drawRoundRect(RectF(90f, 152f, 130f, 176f), 9f, 9f, fill(XmasDeep))    // poche
+        c.drawRect(RectF(90f, 152f, 130f, 155f), fill(Wool))
+        c.restore()
+        c.drawLine(110f, 124f, 110f, 148f, stroke(XmasDeep, 2f))    // fermeture
+    }
+
+    /** Le col de fourrure, posé au creux du cou avant que la tête soit dessinée. */
+    private fun hoodCollar(c: Canvas) {
+        c.drawOval(oval(110f, 120f, 33f, 10f), fill(Wool))
+        val cord = stroke(Wool, 3f)
+        c.drawLine(102f, 126f, 100f, 138f, cord)
+        c.drawLine(118f, 126f, 120f, 138f, cord)
+    }
+
+    /** Tuque tricotée, cornes passées au travers. */
+    private fun tuque(c: Canvas) {
+        Path().apply {
+            moveTo(78f, 48f)
+            cubicTo(82f, 12f, 138f, 12f, 142f, 48f)
+            close()
+        }.also { c.drawPath(it, fill(Knit)) }
+        // deux côtes tricotées, pour que la laine ne lise pas comme du plastique
+        val rib = stroke(0xFF2F8A72.toInt(), 2.4f)
+        c.drawLine(98f, 20f, 94f, 42f, rib)
+        c.drawLine(122f, 20f, 126f, 42f, rib)
+        c.drawRoundRect(RectF(74f, 38f, 146f, 53f), 7.5f, 7.5f, fill(Wool))
+        c.drawCircle(110f, 13f, 11f, fill(Wool))
     }
 
     /** Patte avant : moufle au bord festonné, deux sillons pour les griffes. */
-    private fun arm(c: Canvas) {
-        Path().apply {
+    private fun arm(c: Canvas, sleeve: Boolean) {
+        val shape = Path().apply {
             moveTo(90f, 130f)
             cubicTo(83f, 139f, 82f, 151f, 87f, 159f)
             quadTo(91f, 165f, 94f, 158f)
@@ -149,7 +228,17 @@ object Dragon {
             quadTo(106f, 164f, 107f, 155f)
             cubicTo(110f, 144f, 102f, 133f, 97f, 128f)
             close()
-        }.also { c.drawPath(it, fill(Pink)) }
+        }
+        c.drawPath(shape, fill(Pink))
+
+        if (sleeve) {
+            // La manche s'arrête au poignet : la patte et ses griffes restent visibles,
+            // sinon on perd le geste des deux pattes jointes qui fait tout le personnage.
+            c.save(); c.clipPath(shape)
+            c.drawRect(RectF(70f, 120f, 112f, 150f), fill(Xmas))
+            c.drawRect(RectF(70f, 150f, 112f, 156f), fill(Wool))
+            c.restore()
+        }
 
         val claw = stroke(PinkDeep, 2.4f)
         Path().apply { moveTo(99f, 146f); quadTo(96f, 153f, 97f, 159f) }
@@ -347,7 +436,7 @@ object Dragon {
     }
 
     /** Tête recadrée en rond, pour la grosse icône de la notification. */
-    fun faceBitmap(px: Int, mood: Mood): Bitmap {
+    fun faceBitmap(px: Int, mood: Mood, worn: Set<String> = emptySet()): Bitmap {
         val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         c.drawCircle(px / 2f, px / 2f, px / 2f, fill(0xFFFCEFF4.toInt()))
@@ -356,7 +445,7 @@ object Dragon {
         c.translate(px * 0.5f, px * 0.56f)
         c.scale(1.55f, 1.55f)
         c.translate(-110f * k, -76f * k)
-        draw(c, mood, 220f * k)
+        draw(c, mood, 220f * k, 0f, worn)
         c.restore()
         return bmp
     }

@@ -29,6 +29,9 @@ data class HomeState(
     val justLogged: Medication? = null,
     val dayComplete: Boolean = false,   // toutes les doses du jour sont enregistrées
     val streakOverlay: Int? = null,     // jours à fêter en plein écran, sinon null
+    val owned: Set<String> = emptySet(),   // cosmétiques gagnés
+    val worn: Set<String> = emptySet(),    // cosmétiques portés
+    val chestReward: String? = null,
     val pairing: Boolean = false,
     val hasNfc: Boolean = true,
     val nfcOff: Boolean = false
@@ -109,7 +112,7 @@ fun HomeScreen(
                 Modifier.fillMaxWidth().padding(vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Mascot(mood, Modifier.size(200.dp))
+                Mascot(mood, Modifier.size(200.dp), worn = state.worn)
                 Spacer(Modifier.height(8.dp))
                 AnimatedContent(targetState = mood, label = "prompt") { m ->
                     Text(

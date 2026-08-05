@@ -265,6 +265,37 @@ countdown vanish on its own, and it re-arms tomorrow's alarm on the way out.
 It uses its own channel (*Série en jeu*, `IMPORTANCE_DEFAULT`), so it can be muted
 separately from the reminder itself without losing the thing that actually matters.
 
+## Cosmetics, chests and the locker
+
+One piece of clothing per **complete day**, never twice the same, permanent once earned.
+Three exist so far -- a bobble tuque with holes for the horns, little red boots, and a
+Christmas hoodie. The catalogue is `Cosmetics.ALL`; adding a fourth is one entry there
+plus one drawing function in `Dragon.kt` keyed on the same id. Nothing else needs touching.
+
+**The chest** appears after the streak page, and only after the Continuer button has been
+pressed **four times**. Each press fills the button further and vibrates a little harder.
+That serves no function whatsoever, which is the point: the chest is waiting behind it,
+and three seconds of pointless effort turn a screen transition into impatience. One press
+would make the reward free.
+
+Then the chest shakes three times, escalating, before it opens. The satisfaction is
+entirely in the wait -- a chest that opens instantly is a dialog box; a chest that rattles
+for two seconds while you can't do anything is a gift.
+
+The piece is written to the database **before** the chest animates, not when it's
+dismissed. If the app dies mid-animation the gift is already banked; granting on close
+would lose it at the single most infuriating moment possible.
+
+**The locker** is a page to the left of home, reached by swiping, Clash Royale style. It
+has no tab, deliberately: it must never compete with the one thing that matters. Locked
+pieces stay visible as faded silhouettes, because knowing exactly what's missing is the
+whole engine of a collection -- a grid showing only what you own has no reason to be
+opened.
+
+Storage is Room table `OwnedCosmetic`, added in schema **version 2** with a real migration
+that creates the table. Emphatically not `fallbackToDestructiveMigration`, which would
+erase months of dose history to make room for a hat.
+
 ## Removing a medication
 
 Two deliberate taps. **Retirer** replaces the row's footer with a confirmation panel, and
@@ -295,6 +326,7 @@ sit on the target line as hollow rings.
 - Multiple daily slots per medication (the schema holds one time per med today)
 - Linking a sticker to a medication that was created without one
 - Editing or deleting a medication
+- More cosmetics (the catalogue is built to take them)
 - CSV export for appointments
 - A snooze button — deliberately absent, since it undoes the whole idea
 
