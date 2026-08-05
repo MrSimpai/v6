@@ -142,16 +142,29 @@ data class OwnedCosmetic(
  * in the activity because both the UI and the reminder receiver need the same number, and
  * two copies of a streak calculation is two chances to disagree about what day it is.
  */
-suspend fun MedDao.perfectDayStreak(meds: List<Medication>): Int {
+suspend fun MedDao.perfectDayStreak(meds: List<Medication>, from: Int = 0): Int {
     if (meds.isEmpty()) return 0
     val frozen = freezeDays().toSet()
-    var n = 0
+    var n = from
     while (n < 3650) {
         val done = meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, n)) != null }
-        if (!done && Slots.dayStart(n) !in frozen) return n
+        if (!done && Slots.dayStart(n) !in frozen) return n - from
         n++
     }
-    return n
+    return n - from
+}
+
+/**
+ * La série telle qu'elle se lit maintenant : celle d'hier tant que la journée n'est pas
+ * finie, celle d'aujourd'hui dès qu'elle l'est.
+ *
+ * Sans ça le compteur du widget tomberait à zéro chaque matin et remonterait le soir, ce
+ * qui donnerait l'impression de tout perdre toutes les nuits.
+ */
+suspend fun MedDao.currentStreak(meds: List<Medication>): Int {
+    if (meds.isEmpty()) return 0
+    val todayDone = meds.all { logForSlot(it.tagId, Slots.todayAt(it)) != null }
+    return if (todayDone) perfectDayStreak(meds) else perfectDayStreak(meds, from = 1)
 }
 
 /**

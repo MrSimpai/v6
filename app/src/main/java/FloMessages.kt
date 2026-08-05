@@ -244,6 +244,20 @@ object FloMessages {
             )
     }
 
+    /**
+     * Ce que dit le dragon selon son humeur. Sortie ici pour que l'app et le widget ne
+     * puissent pas afficher deux phrases différentes au même moment — c'est le genre de
+     * décalage qui fait douter de tout le reste.
+     */
+    fun moodLine(mood: Mood): String = when (mood) {
+        Mood.Cheering -> "Merci. ${Her.dragon} est contente."
+        Mood.Overdue  -> "Prends ta dose d'aujourd'hui, s'il te plaît."
+        Mood.Sad      -> "${Her.dragon} attend depuis un moment."
+        Mood.Waiting  -> "Une dose t'attend."
+        Mood.Sleeping -> "Rien de prévu. ${Her.dragon} fait la sieste."
+    }
+
+
     fun comeback(seed: Long = System.currentTimeMillis()): FloLine =
         RETOUR[Random(seed).nextInt(RETOUR.size)]
 }

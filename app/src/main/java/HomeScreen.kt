@@ -16,8 +16,9 @@ import androidx.compose.ui.unit.dp
 import com.example.medtap.Her
 import com.example.medtap.data.DoseLog
 import com.example.medtap.data.Medication
-import com.example.medtap.data.ReminderHealth
 import com.example.medtap.data.Slots
+import com.example.medtap.reminder.FloMessages
+import com.example.medtap.reminder.FloMessages
 import com.example.medtap.data.isManual
 import java.text.SimpleDateFormat
 import java.util.*
@@ -56,9 +57,6 @@ fun HomeScreen(
     onForget: (Medication) -> Unit,
     onSkip: (Medication) -> Unit,
     onEdit: (Medication) -> Unit,
-    onFixBattery: () -> Unit,
-    onBackup: () -> Unit,
-    onRestore: () -> Unit,
     onCancelPairing: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -68,6 +66,10 @@ fun HomeScreen(
     // confirmation closes the first -- two armed delete buttons at once is how you tap
     // the wrong one.
     var confirmingRemoval by remember { mutableStateOf<String?>(null) }
+
+    // Sauter une dose est irréversible pour la journée : le créneau est consommé, et il
+    // n'y a pas de « annuler ». Donc deux gestes, comme pour le retrait.
+    var confirmingSkip by remember { mutableStateOf<String?>(null) }
 
     // A dose is owed once its slot has passed and nothing has been logged against it.
     val owed = state.meds.filter { med ->
@@ -126,29 +128,6 @@ fun HomeScreen(
             }
         }
 
-        if (state.batteryRestricted) {
-            Spacer(Modifier.height(14.dp))
-            Surface(color = Pal.Card, shape = Soft) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text("Les rappels risquent d'être coupés", style = Type.Title, color = Pal.Apricot)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Android peut mettre l'app en veille et supprimer les rappels sans " +
-                            "prévenir. Une seule autorisation règle ça.",
-                        style = Type.Body, color = Pal.Muted
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = onFixBattery,
-                        shape = Pill,
-                        colors = ButtonDefaults.buttonColors(containerColor = Pal.Apricot),
-                        modifier = Modifier.fillMaxWidth().height(46.dp)
-                    ) { Text("Autoriser", style = Type.Title) }
-                    Spacer(Modifier.height(8.dp))
-                    Text(ReminderHealth.SAMSUNG_STEPS, style = Type.Label, color = Pal.Muted)
-                }
-            }
-        }
 
         Spacer(Modifier.height(20.dp))
 
@@ -167,11 +146,7 @@ fun HomeScreen(
                                 "Active le NFC, puis approche l'étiquette"
                             state.pairing ->
                                 "Approche une étiquette vierge du dos du téléphone"
-                            m == Mood.Cheering -> "Merci. ${Her.dragon} est contente."
-                            m == Mood.Overdue -> "Prends ta dose d'aujourd'hui, s'il te plaît."
-                            m == Mood.Sad -> "${Her.dragon} attend depuis un moment."
-                            m == Mood.Waiting -> "Une dose t'attend en dessous."
-                            else -> "Rien de prévu. ${Her.dragon} fait la sieste."
+                            else -> FloMessages.moodLine(m)
                         },
                         style = Type.Body, color = Pal.Muted, textAlign = TextAlign.Center
                     )
@@ -203,7 +178,10 @@ fun HomeScreen(
                 onConfirmRemove = { confirmingRemoval = null; onForget(med) },
                 log = state.logs.firstOrNull { it.tagId == med.tagId && it.scheduledFor == slot },
                 onMarkTaken = { onMarkTaken(med) },
-                onSkip = { onSkip(med) },
+                confirmingSkip = confirmingSkip == med.tagId,
+                onAskSkip = { confirmingSkip = med.tagId },
+                onCancelSkip = { confirmingSkip = null },
+                onConfirmSkip = { confirmingSkip = null; onSkip(med) },
                 onEdit = { onEdit(med) }
             )
             Spacer(Modifier.height(10.dp))
@@ -248,17 +226,7 @@ fun HomeScreen(
             }
         }
 
-        Spacer(Modifier.height(30.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            TextButton(onClick = onBackup) {
-                Text("Sauvegarder", style = Type.Label, color = Pal.Iris)
-            }
-            TextButton(onClick = onRestore) {
-                Text("Restaurer", style = Type.Label, color = Pal.Muted)
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(36.dp))
         Text(
             Her.dedication,
             style = Type.Label, color = Pal.Muted,
@@ -285,7 +253,10 @@ private fun MedRow(
     onCancelRemove: () -> Unit,
     onConfirmRemove: () -> Unit,
     onMarkTaken: () -> Unit,
-    onSkip: () -> Unit,
+    confirmingSkip: Boolean,
+    onAskSkip: () -> Unit,
+    onCancelSkip: () -> Unit,
+    onConfirmSkip: () -> Unit,
     onEdit: () -> Unit
 ) {
     Surface(
@@ -343,8 +314,38 @@ private fun MedRow(
                 // bouteille vide ou une pause prescrite ne laisse qu'un choix : noter une
                 // dose jamais prise. C'est le graphique qu'on montre à un médecin.
                 Spacer(Modifier.height(4.dp))
-                TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) {
-                    Text("Pas aujourd'hui", style = Type.Label, color = Pal.Muted)
+                if (!confirmingSkip) {
+                    TextButton(onClick = onAskSkip, modifier = Modifier.fillMaxWidth()) {
+                        Text("Pas aujourd'hui", style = Type.Label, color = Pal.Muted)
+                    }
+                } else {
+                    Surface(color = Pal.Mist, shape = RoundedCornerShape(16.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                            Text("Sauter la dose d'aujourd'hui ?", style = Type.Title, color = Pal.Ink)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Elle sera notée comme sautée, pas comme prise. Les rappels " +
+                                    "s'arrêtent et ta série tient, mais le créneau est " +
+                                    "consommé pour la journée.",
+                                style = Type.Label, color = Pal.Muted
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Row(Modifier.fillMaxWidth()) {
+                                OutlinedButton(
+                                    onClick = onCancelSkip,
+                                    shape = Pill,
+                                    modifier = Modifier.weight(1f).height(46.dp)
+                                ) { Text("Annuler", style = Type.Label, color = Pal.Ink) }
+                                Spacer(Modifier.width(10.dp))
+                                Button(
+                                    onClick = onConfirmSkip,
+                                    shape = Pill,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Pal.Apricot),
+                                    modifier = Modifier.weight(1f).height(46.dp)
+                                ) { Text("Oui, sauter", style = Type.Label) }
+                            }
+                        }
+                    }
                 }
             }
 

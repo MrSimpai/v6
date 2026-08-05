@@ -476,6 +476,13 @@ object Dragon {
         }.also { c.drawPath(it, fill(Blush)) }
     }
 
+    /** Le dragon entier sur fond transparent — widget, aperçus, tout ce qui n'est pas Compose. */
+    fun bitmap(px: Int, mood: Mood, worn: Set<String> = emptySet()): Bitmap {
+        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        draw(Canvas(bmp), mood, px.toFloat(), 0f, worn)
+        return bmp
+    }
+
     /** Tête recadrée en rond, pour la grosse icône de la notification. */
     fun faceBitmap(px: Int, mood: Mood, worn: Set<String> = emptySet()): Bitmap {
         val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)

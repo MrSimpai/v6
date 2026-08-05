@@ -326,20 +326,28 @@ doctor. **Pas aujourd'hui** writes a normal `DoseLog` with `skipped = true`: rem
 stop, the streak holds, and the drift chart plots nothing, because there is nothing to
 plot.
 
+It takes two taps, like removal. The slot is consumed for the day and there is no undo, so
+a stray thumb shouldn't be able to spend it.
+
 ## Reminders that actually fire
 
 The real failure mode on Samsung -- the S25 included -- is One UI putting the app to sleep
 and dropping its alarms without a word. The symptom is the worst possible one for a
 medication app: nothing arrives, and nobody notices.
 
-The home screen shows a card whenever `isIgnoringBatteryOptimizations` is false, with a
-one-tap fix, plus the exact One UI path (Batterie → Limites d'utilisation en arrière-plan
-→ Applications jamais mises en veille), because the system dialog alone isn't enough on
-Samsung.
+This lives on the **settings page**, swiped to from the right, with a one-tap fix and the
+exact One UI path (Batterie → Limites d'utilisation en arrière-plan → Applications jamais
+mises en veille), because the system dialog alone isn't enough on Samsung.
+
+It started on the home screen and was moved off it. That warning matters twice a year and
+is clutter the other 363 days, and the home screen has to answer exactly one question --
+have I taken my pill -- with everything that doesn't answer it pushed to one side or the
+other. Three pages now: locker left, home centre, settings right.
 
 ## Backup
 
-Local JSON to a file she picks: medications, every log, cosmetics, freezes. No account, no
+On the settings page. Local JSON to a file she picks: medications, every log, cosmetics,
+freezes. No account, no
 cloud, no server to keep alive in five years -- a file she can drop in Drive and forget is
 the only backup format that outlives whoever wrote the app.
 

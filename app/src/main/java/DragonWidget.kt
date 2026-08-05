@@ -6,11 +6,13 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.view.View
 import android.widget.RemoteViews
 import com.example.medtap.MainActivity
 import com.example.medtap.R
 import com.example.medtap.data.Db
 import com.example.medtap.data.Slots
+import com.example.medtap.data.currentStreak
 import com.example.medtap.data.outstandingToday
 import com.example.medtap.ui.Dragon
 import com.example.medtap.ui.Mood
@@ -19,11 +21,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Le dragon sur l'écran d'accueil, avec un bouton qui note la dose sans ouvrir l'app.
+ * Le dragon sur l'écran d'accueil : son humeur, la série en cours, et la phrase écrite à
+ * la main qui va avec.
  *
- * C'est le raccourci le plus court qui existe entre « j'y pense » et « c'est noté » : deux
- * secondes, sans lancer quoi que ce soit. Le rappel le plus efficace est celui qu'on peut
- * satisfaire depuis l'endroit où on le voit.
+ * Il ne fait rien d'autre que montrer. Noter une dose se fait dans l'app, où l'on peut
+ * confirmer, célébrer et ouvrir un coffre — un bouton sur l'écran d'accueil enregistrerait
+ * la même chose en escamotant tout ce qui donne envie de recommencer demain. Un widget qui
+ * agit ferait gagner deux secondes et perdre le rituel.
  *
  * Le widget se redessine à chaque changement de données, via [refresh].
  */
@@ -33,25 +37,7 @@ class DragonWidget : AppWidgetProvider() {
         render(ctx, mgr, ids)
     }
 
-    override fun onReceive(ctx: Context, intent: Intent) {
-        super.onReceive(ctx, intent)
-        if (intent.action == ACTION_LOG) {
-            val app = ctx.applicationContext
-            CoroutineScope(Dispatchers.IO).launch {
-                val dao = Db.get(app).dao()
-                val meds = dao.activeMedsOnce()
-                // La plus en retard d'abord : c'est celle qu'on avait en tête en tapant.
-                val target = dao.outstandingToday(meds)
-                    .filter { Slots.canLogNow(it) }
-                    .minByOrNull { Slots.todayAt(it) } ?: return@launch
-                Reminders.logFromOutside(app, target)
-                refresh(app)
-            }
-        }
-    }
-
     companion object {
-        const val ACTION_LOG = "com.example.medtap.WIDGET_LOG"
 
         /** Redessine tous les widgets posés. Sans effet s'il n'y en a aucun. */
         fun refresh(ctx: Context) {
@@ -77,36 +63,47 @@ class DragonWidget : AppWidgetProvider() {
                     else -> Mood.Waiting
                 }
 
-                val label = when {
-                    owed.isEmpty() && meds.isEmpty() -> "Aucun médicament"
-                    owed.isEmpty() -> "Tout est à jour"
-                    owed.size == 1 -> owed[0].name
-                    else -> "${owed.size} doses"
+                // La série telle qu'elle se lit maintenant, pas celle d'aujourd'hui :
+                // sinon le compteur tomberait à zéro chaque matin.
+                val streak = dao.currentStreak(meds)
+
+                val moodText = when {
+                    meds.isEmpty() -> "Ajoute un médicament pour commencer."
+                    owed.size > 1 -> "${owed.size} doses t'attendent."
+                    owed.size == 1 -> "${owed[0].name} t'attend."
+                    else -> FloMessages.moodLine(mood)
                 }
 
-                val open = PendingIntent.getActivity(
-                    app, 0,
-                    Intent(app, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val log = PendingIntent.getBroadcast(
-                    app, 1,
-                    Intent(app, DragonWidget::class.java).setAction(ACTION_LOG),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-
                 val views = RemoteViews(app.packageName, R.layout.widget_dragon).apply {
-                    setImageViewBitmap(R.id.widget_dragon, Dragon.faceBitmap(220, mood, worn))
-                    setTextViewText(R.id.widget_label, label)
-                    setOnClickPendingIntent(R.id.widget_dragon, open)
-                    setOnClickPendingIntent(R.id.widget_label, open)
-                    setTextViewText(
-                        R.id.widget_button,
-                        if (owed.isEmpty()) "Ouvrir" else "Je l'ai prise"
-                    )
+                    // Le dragon entier plutôt que sa tête : c'est le seul endroit hors du casier
+                    // où les bottes et le hoodie se voient, et une tenue qu'on ne croise
+                    // jamais ne vaut pas la peine d'être gagnée.
+                    setImageViewBitmap(R.id.widget_dragon, Dragon.bitmap(240, mood, worn))
+                    setTextViewText(R.id.widget_mood, moodText)
+
+                    if (streak > 0) {
+                        setViewVisibility(R.id.widget_streak, View.VISIBLE)
+                        setTextViewText(
+                            R.id.widget_streak,
+                            if (streak == 1) "1 jour ❄" else "$streak jours"
+                        )
+                        setTextViewText(R.id.widget_line, FloMessages.dayStreakLine(streak))
+                        setViewVisibility(R.id.widget_line, View.VISIBLE)
+                    } else {
+                        setViewVisibility(R.id.widget_streak, View.GONE)
+                        setViewVisibility(R.id.widget_line, View.GONE)
+                    }
+
+                    // Tout le widget ouvre l'app : il n'y a qu'une seule chose à y faire.
                     setOnClickPendingIntent(
-                        R.id.widget_button, if (owed.isEmpty()) open else log
+                        R.id.widget_dragon,
+                        PendingIntent.getActivity(
+                            app, 0,
+                            Intent(app, MainActivity::class.java).addFlags(
+                                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            ),
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
                     )
                 }
                 ids.forEach { mgr.updateAppWidget(it, views) }

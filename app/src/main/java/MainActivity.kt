@@ -76,13 +76,24 @@ class MainActivity : ComponentActivity() {
                 // Deux pages, l'accueil au départ : le casier se trouve en glissant vers
                 // la droite, comme le casier de Clash Royale. Il n'a pas d'onglet parce
                 // qu'il ne doit jamais concurrencer la seule chose qui compte, la dose.
-                val pager = rememberPagerState(initialPage = 1) { 2 }
+                // Trois pages : le casier à gauche, l'accueil au centre, les réglages à
+                // droite. L'accueil ne répond qu'à une question — ai-je pris ma pilule —
+                // et tout ce qui n'y répond pas a été déplacé de part et d'autre.
+                val pager = rememberPagerState(initialPage = 1) { 3 }
                 HorizontalPager(state = pager, modifier = androidx.compose.ui.Modifier.fillMaxSize()) { page ->
-                    if (page == 0) LockerScreen(
-                        owned = state.value.owned,
-                        worn = state.value.worn,
-                        onToggle = { id -> toggleCosmetic(id) }
-                    ) else
+                    when (page) {
+                        0 -> LockerScreen(
+                            owned = state.value.owned,
+                            worn = state.value.worn,
+                            onToggle = { id -> toggleCosmetic(id) }
+                        )
+                        2 -> SettingsScreen(
+                            batteryRestricted = state.value.batteryRestricted,
+                            onFixBattery = { requestBatteryExemption() },
+                            onBackup = { createBackup.launch(Backup.suggestedFileName()) },
+                            onRestore = { openBackup.launch(arrayOf("application/json")) }
+                        )
+                        else ->
                 HomeScreen(
                     state = state.value,
                     onAddMedication = { showAdd = true },
@@ -90,14 +101,12 @@ class MainActivity : ComponentActivity() {
                     onForget = { med -> forget(med) },
                     onSkip = { med -> skipDose(med) },
                     onEdit = { med -> editing.value = med },
-                    onFixBattery = { requestBatteryExemption() },
-                    onBackup = { createBackup.launch(Backup.suggestedFileName()) },
-                    onRestore = { openBackup.launch(arrayOf("application/json")) },
                     onCancelPairing = {
                         pendingMed = null
                         state.value = state.value.copy(pairing = false)
                     }
                 )
+                    }
                 }
                 state.value.streakOverlay?.let { days ->
                     StreakCelebration(
@@ -122,7 +131,7 @@ class MainActivity : ComponentActivity() {
                 if (!showAdd && state.value.streakOverlay == null && state.value.chestReward == null) {
                     PageDots(
                         current = pager.currentPage,
-                        count = 2,
+                        count = 3,
                         modifier = androidx.compose.ui.Modifier
                             .align(androidx.compose.ui.Alignment.BottomCenter)
                             .padding(bottom = 14.dp)
