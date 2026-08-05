@@ -1,13 +1,16 @@
 package com.example.medtap.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.example.medtap.data.Medication
 import java.util.Locale
@@ -20,12 +23,14 @@ import java.util.Locale
  * L'étiquette NFC est un raccourci qu'on peut coller plus tard sur la bouteille, quand
  * on en a envie — pas une condition pour que l'app serve à quelque chose.
  *
+ * Plein écran plutôt qu'une feuille : le clavier mange la moitié d'une feuille modale,
+ * et il reste alors trois champs coincés dans une bande de deux centimètres.
+ *
  * [onConfirm] reçoit le brouillon et un booléen : vrai si on veut enchaîner avec
  * l'appairage d'une étiquette, faux pour enregistrer directement.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddMedicationSheet(
+fun AddMedicationScreen(
     onDismiss: () -> Unit,
     onConfirm: (Medication, Boolean) -> Unit
 ) {
@@ -41,15 +46,29 @@ fun AddMedicationSheet(
         hourOfDay = hour, minute = minute
     )
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Pal.Card) {
-        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 40.dp)) {
-            Text("Nouveau médicament", style = Type.Display, color = Pal.Ink)
+    Box(Modifier.fillMaxSize().background(Pal.Mist)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(top = 24.dp, bottom = 40.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("NOUVEAU", style = Type.Label, color = Pal.Muted, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss) {
+                    Text("Annuler", style = Type.Label, color = Pal.Muted)
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Un médicament de plus", style = Type.Display, color = Pal.Ink)
             Spacer(Modifier.height(6.dp))
             Text(
                 "Le nom, la dose, et l'heure du rappel. C'est tout ce qu'il faut.",
                 style = Type.Body, color = Pal.Muted
             )
-            Spacer(Modifier.height(24.dp))
+
+            Spacer(Modifier.height(28.dp))
 
             OutlinedTextField(
                 value = name, onValueChange = { name = it },
@@ -65,7 +84,7 @@ fun AddMedicationSheet(
                 modifier = Modifier.fillMaxWidth(), shape = Soft
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(28.dp))
             Text("RAPPEL À", style = Type.Label, color = Pal.Muted)
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -77,7 +96,7 @@ fun AddMedicationSheet(
                     onUp = { minute = (minute + 5) % 60 }, onDown = { minute = (minute + 55) % 60 })
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(36.dp))
             Button(
                 onClick = { onConfirm(draft(), false) },
                 enabled = name.isNotBlank(),
@@ -105,7 +124,7 @@ fun AddMedicationSheet(
 
 @Composable
 private fun Stepper(value: String, onUp: () -> Unit, onDown: () -> Unit) {
-    Surface(color = Pal.Mist, shape = Soft) {
+    Surface(color = Pal.Card, shape = Soft) {
         Column(
             Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -113,6 +132,30 @@ private fun Stepper(value: String, onUp: () -> Unit, onDown: () -> Unit) {
             TextButton(onClick = onUp) { Text("+", style = Type.Title, color = Pal.Iris) }
             Text(value, style = Type.Display, color = Pal.Ink)
             TextButton(onClick = onDown) { Text("-", style = Type.Title, color = Pal.Iris) }
+        }
+    }
+}
+
+/** Les deux points en bas : la seule indication qu'il existe une page à gauche. */
+@Composable
+fun PageDots(current: Int, count: Int, modifier: Modifier = Modifier) {
+    Surface(
+        color = Pal.Card.copy(alpha = 0.92f),
+        shape = Pill,
+        modifier = modifier
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            repeat(count) { i ->
+                Box(
+                    Modifier
+                        .size(if (i == current) 9.dp else 7.dp)
+                        .background(if (i == current) Pal.Iris else Pal.Blush, Pill)
+                )
+            }
         }
     }
 }

@@ -10,18 +10,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.medtap.Her
 
 /**
- * Le casier : le dragon habillé en grand, et la collection en dessous.
+ * Le casier : le dragon habillé en grand, et la collection en dessous, par emplacement.
  *
- * Les pièces verrouillées restent visibles, en silhouette. C'est le ressort entier d'un
- * casier : savoir précisément ce qui manque vaut bien plus que de le découvrir. Une grille
- * qui ne montrerait que ce qu'on possède n'aurait aucune raison d'être ouverte.
+ * Un seul objet porté par section — deux chapeaux en même temps, ça n'existe pas. Mettre
+ * une pièce enlève donc automatiquement celle qui occupait la place, plutôt que d'afficher
+ * une erreur : personne n'a envie de lire « retirez d'abord votre tuque ».
+ *
+ * Les pièces pas encore gagnées apparaissent en ombre chinoise, sans nom. On voit la forme,
+ * on devine, on ne sait pas. Tout révéler ferait du casier une liste de courses ; ne rien
+ * montrer lui enlèverait sa raison d'être ouvert.
  */
 @Composable
 fun LockerScreen(
@@ -69,7 +72,13 @@ fun LockerScreen(
         Slot.entries.forEach { slot ->
             val items = Cosmetics.ALL.filter { it.slot == slot }
             if (items.isEmpty()) return@forEach
-            Text(slot.label.uppercase(), style = Type.Label, color = Pal.Iris)
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(slot.label.uppercase(), style = Type.Label, color = Pal.Iris,
+                    modifier = Modifier.weight(1f))
+                val here = items.count { it.id in owned }
+                Text("$here/${items.size}", style = Type.Label, color = Pal.Muted)
+            }
             Spacer(Modifier.height(8.dp))
             items.forEach { item ->
                 CosmeticRow(
@@ -85,8 +94,8 @@ fun LockerScreen(
 
         Spacer(Modifier.height(6.dp))
         Text(
-            "Une pièce par journée complète. Elles ne se répètent jamais, et une fois " +
-                "gagnées elles restent à toi.",
+            "Une pièce par journée complète, jamais deux fois la même, et une seule " +
+                "portée par emplacement. Une fois gagnées, elles restent à toi.",
             style = Type.Label, color = Pal.Muted, textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
@@ -121,19 +130,20 @@ private fun CosmeticRow(
             ) {
                 Mascot(
                     Mood.Sleeping,
-                    Modifier.size(60.dp).alpha(if (unlocked) 1f else 0.18f),
-                    worn = setOf(item.id)
+                    Modifier.size(60.dp),
+                    worn = setOf(item.id),
+                    silhouette = !unlocked
                 )
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (unlocked) item.name else "Pièce verrouillée",
+                    if (unlocked) item.name else "? ? ?",
                     style = Type.Title,
                     color = if (unlocked) Pal.Ink else Pal.Muted
                 )
                 Text(
-                    if (unlocked) item.blurb else "Termine une journée de plus pour l'ouvrir.",
+                    if (unlocked) item.blurb else "Encore une journée complète pour la découvrir.",
                     style = Type.Label, color = Pal.Muted
                 )
             }

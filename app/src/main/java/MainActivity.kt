@@ -12,6 +12,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.*
@@ -90,7 +92,19 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
-                if (showAdd) AddMedicationSheet(
+                // Les points restent sous les deux pages, mais disparaissent dès qu'un
+                // écran plein passe par-dessus : ils indiqueraient une navigation qui
+                // n'existe plus à ce moment-là.
+                if (!showAdd && state.value.streakOverlay == null && state.value.chestReward == null) {
+                    PageDots(
+                        current = pager.currentPage,
+                        count = 2,
+                        modifier = androidx.compose.ui.Modifier
+                            .align(androidx.compose.ui.Alignment.BottomCenter)
+                            .padding(bottom = 14.dp)
+                    )
+                }
+                if (showAdd) AddMedicationScreen(
                     onDismiss = { showAdd = false },
                     onConfirm = { draft, pairWithTag ->
                         showAdd = false
@@ -182,10 +196,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Un seul objet porté par emplacement. Équiper une pièce retire silencieusement celle
+     * qui occupait la place -- c'est ce qu'on attend d'une garde-robe, et ça évite un
+     * message d'erreur pour un problème que l'app peut régler toute seule.
+     */
     private fun toggleCosmetic(id: String) = lifecycleScope.launch(Dispatchers.IO) {
-        val current = Db.get(this@MainActivity).dao().cosmeticsOnce()
-            .firstOrNull { it.id == id } ?: return@launch
-        Db.get(this@MainActivity).dao().setEquipped(id, !current.equipped)
+        val dao = Db.get(this@MainActivity).dao()
+        val owned = dao.cosmeticsOnce()
+        val current = owned.firstOrNull { it.id == id } ?: return@launch
+        val slot = Cosmetics.byId(id)?.slot ?: return@launch
+
+        if (current.equipped) {
+            dao.setEquipped(id, false)
+            return@launch
+        }
+        owned.filter { it.equipped && Cosmetics.byId(it.id)?.slot == slot }
+            .forEach { dao.setEquipped(it.id, false) }
+        dao.setEquipped(id, true)
     }
 
     /** Remove a medication and its history. Alarms first, so nothing fires into a void. */

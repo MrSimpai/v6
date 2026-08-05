@@ -272,6 +272,9 @@ Three exist so far -- a bobble tuque with holes for the horns, little red boots,
 Christmas hoodie. The catalogue is `Cosmetics.ALL`; adding a fourth is one entry there
 plus one drawing function in `Dragon.kt` keyed on the same id. Nothing else needs touching.
 
+Adding a medication is its own full screen rather than a bottom sheet: the keyboard eats
+half a modal sheet, leaving three fields crammed into two centimetres.
+
 **The chest** appears after the streak page, and only after the Continuer button has been
 pressed **four times**. Each press fills the button further and vibrates a little harder.
 That serves no function whatsoever, which is the point: the chest is waiting behind it,
@@ -286,11 +289,20 @@ The piece is written to the database **before** the chest animates, not when it'
 dismissed. If the app dies mid-animation the gift is already banked; granting on close
 would lose it at the single most infuriating moment possible.
 
-**The locker** is a page to the left of home, reached by swiping, Clash Royale style. It
-has no tab, deliberately: it must never compete with the one thing that matters. Locked
-pieces stay visible as faded silhouettes, because knowing exactly what's missing is the
-whole engine of a collection -- a grid showing only what you own has no reason to be
-opened.
+**The locker** is a page to the left of home, reached by swiping, Clash Royale style. Two
+small dots at the bottom of the screen are the only sign it exists -- no tab, because it
+must never compete with the one thing that matters.
+
+Pieces are grouped by slot and **one is worn per slot**: equipping a hat silently removes
+the hat already there, rather than showing an error. Nobody wants to read "please remove
+your tuque first" for a problem the app can solve by itself.
+
+Locked pieces show as a **two-tone silhouette** -- the dragon greys out, the unearned
+piece stays near-black -- with the name replaced by `? ? ?`. Painting both the same colour
+was the first attempt and produced a black dragon in a black hat, i.e. a blob, when the
+shape of the piece is the one thing worth showing. You can see the outline and guess; you
+don't know the colour or the detail. Revealing everything would make the locker a shopping
+list, showing nothing would leave it no reason to be opened.
 
 Storage is Room table `OwnedCosmetic`, added in schema **version 2** with a real migration
 that creates the table. Emphatically not `fallbackToDestructiveMigration`, which would

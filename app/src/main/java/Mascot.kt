@@ -20,7 +20,12 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
  * instant it is logged, whether by a scan or by the button.
  */
 @Composable
-fun Mascot(mood: Mood, modifier: Modifier = Modifier, worn: Set<String> = emptySet()) {
+fun Mascot(
+    mood: Mood,
+    modifier: Modifier = Modifier,
+    worn: Set<String> = emptySet(),
+    silhouette: Boolean = false
+) {
     val t = rememberInfiniteTransition(label = "dragon")
     val phase by t.animateFloat(
         0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "bob"
@@ -38,7 +43,7 @@ fun Mascot(mood: Mood, modifier: Modifier = Modifier, worn: Set<String> = emptyS
             val s = size.minDimension
             nc.save()
             nc.translate((size.width - s) / 2f, (size.height - s) / 2f)
-            Dragon.draw(nc, mood, s, phase, worn)
+            Dragon.draw(nc, mood, s, phase, worn, silhouette)
             nc.restore()
         }
     }

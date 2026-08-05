@@ -45,12 +45,31 @@ object Dragon {
 
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
+    /**
+     * Quand il est posé, toutes les couleurs sont remplacées par celle-ci et le dragon
+     * devient une ombre chinoise. C'est ce qui permet au casier de montrer la FORME d'une
+     * pièce pas encore gagnée sans en révéler la couleur ni le détail.
+     */
+    private var tint: Int? = null
+
+    /**
+     * En mode ombre chinoise, le dragon vire au gris pâle mais la pièce reste presque
+     * noire. Tout peindre du même ton donnerait un dragon noir coiffé d'un chapeau noir,
+     * c'est-à-dire une tache — or c'est justement la forme de la pièce qu'on veut montrer.
+     */
+    private inline fun asWear(block: () -> Unit) {
+        val saved = tint
+        if (saved != null) tint = 0xFF1E0C16.toInt()
+        block()
+        tint = saved
+    }
+
     private fun fill(c: Int) = p.apply {
-        style = Paint.Style.FILL; color = c; alpha = 255; strokeWidth = 0f
+        style = Paint.Style.FILL; color = tint ?: c; alpha = 255; strokeWidth = 0f
     }
 
     private fun stroke(c: Int, w: Float) = p.apply {
-        style = Paint.Style.STROKE; color = c; alpha = 255
+        style = Paint.Style.STROKE; color = tint ?: c; alpha = 255
         strokeWidth = w; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
     }
 
@@ -67,7 +86,19 @@ object Dragon {
         mood: Mood,
         size: Float,
         phase: Float = 0f,
-        worn: Set<String> = emptySet()
+        worn: Set<String> = emptySet(),
+        silhouette: Boolean = false
+    ) {
+        tint = if (silhouette) 0xFFDDCAD3.toInt() else null
+        try {
+            drawInner(c, mood, size, phase, worn)
+        } finally {
+            tint = null
+        }
+    }
+
+    private fun drawInner(
+        c: Canvas, mood: Mood, size: Float, phase: Float, worn: Set<String>
     ) {
         val s = size / 220f
         c.save()
@@ -149,11 +180,13 @@ object Dragon {
 
         // La botte reprend exactement la silhouette de la patte : elle se lit comme une
         // chaussure enfilée, pas comme une forme rouge posée à côté.
-        c.drawPath(foot, fill(Xmas))
-        c.drawRoundRect(RectF(36f, 190f, 90f, 201f), 6f, 6f, fill(XmasDeep))   // semelle
-        c.drawRoundRect(RectF(42f, 176f, 88f, 183f), 3.5f, 3.5f, fill(Wool))   // lacet
-        c.drawRoundRect(RectF(40f, 157f, 94f, 174f), 8f, 8f, fill(Wool))       // revers
-        heart(c, 62f, 166f, 5f, Xmas)
+        asWear {
+            c.drawPath(foot, fill(Xmas))
+            c.drawRoundRect(RectF(36f, 190f, 90f, 201f), 6f, 6f, fill(XmasDeep))   // semelle
+            c.drawRoundRect(RectF(42f, 176f, 88f, 183f), 3.5f, 3.5f, fill(Wool))   // lacet
+            c.drawRoundRect(RectF(40f, 157f, 94f, 174f), 8f, 8f, fill(Wool))       // revers
+            heart(c, 62f, 166f, 5f, Xmas)
+        }
     }
 
     private fun heart(c: Canvas, cx: Float, cy: Float, r: Float, color: Int) {
@@ -185,37 +218,43 @@ object Dragon {
 
         // Le hoodie est découpé DANS la silhouette du corps, pas dessiné par-dessus :
         // sinon il déborde et le dragon a l'air d'avoir avalé un rectangle.
-        c.save()
-        c.clipPath(shape)
-        c.drawRect(RectF(60f, 108f, 160f, 184f), fill(Xmas))
-        c.drawRect(RectF(60f, 184f, 160f, 196f), fill(Wool))        // bord côtelé
-        c.drawRoundRect(RectF(90f, 152f, 130f, 176f), 9f, 9f, fill(XmasDeep))    // poche
-        c.drawRect(RectF(90f, 152f, 130f, 155f), fill(Wool))
-        c.restore()
-        c.drawLine(110f, 124f, 110f, 148f, stroke(XmasDeep, 2f))    // fermeture
+        asWear {
+            c.save()
+            c.clipPath(shape)
+            c.drawRect(RectF(60f, 108f, 160f, 184f), fill(Xmas))
+            c.drawRect(RectF(60f, 184f, 160f, 196f), fill(Wool))        // bord côtelé
+            c.drawRoundRect(RectF(90f, 152f, 130f, 176f), 9f, 9f, fill(XmasDeep))    // poche
+            c.drawRect(RectF(90f, 152f, 130f, 155f), fill(Wool))
+            c.restore()
+            c.drawLine(110f, 124f, 110f, 148f, stroke(XmasDeep, 2f))    // fermeture
+        }
     }
 
     /** Le col de fourrure, posé au creux du cou avant que la tête soit dessinée. */
     private fun hoodCollar(c: Canvas) {
-        c.drawOval(oval(110f, 120f, 33f, 10f), fill(Wool))
-        val cord = stroke(Wool, 3f)
-        c.drawLine(102f, 126f, 100f, 138f, cord)
-        c.drawLine(118f, 126f, 120f, 138f, cord)
+        asWear {
+            c.drawOval(oval(110f, 120f, 33f, 10f), fill(Wool))
+            val cord = stroke(Wool, 3f)
+            c.drawLine(102f, 126f, 100f, 138f, cord)
+            c.drawLine(118f, 126f, 120f, 138f, cord)
+        }
     }
 
     /** Tuque tricotée, cornes passées au travers. */
     private fun tuque(c: Canvas) {
-        Path().apply {
-            moveTo(78f, 48f)
-            cubicTo(82f, 12f, 138f, 12f, 142f, 48f)
-            close()
-        }.also { c.drawPath(it, fill(Knit)) }
-        // deux côtes tricotées, pour que la laine ne lise pas comme du plastique
-        val rib = stroke(0xFF2F8A72.toInt(), 2.4f)
-        c.drawLine(98f, 20f, 94f, 42f, rib)
-        c.drawLine(122f, 20f, 126f, 42f, rib)
-        c.drawRoundRect(RectF(74f, 38f, 146f, 53f), 7.5f, 7.5f, fill(Wool))
-        c.drawCircle(110f, 13f, 11f, fill(Wool))
+        asWear {
+            Path().apply {
+                moveTo(78f, 48f)
+                cubicTo(82f, 12f, 138f, 12f, 142f, 48f)
+                close()
+            }.also { c.drawPath(it, fill(Knit)) }
+            // deux côtes tricotées, pour que la laine ne lise pas comme du plastique
+            val rib = stroke(0xFF2F8A72.toInt(), 2.4f)
+            c.drawLine(98f, 20f, 94f, 42f, rib)
+            c.drawLine(122f, 20f, 126f, 42f, rib)
+            c.drawRoundRect(RectF(74f, 38f, 146f, 53f), 7.5f, 7.5f, fill(Wool))
+            c.drawCircle(110f, 13f, 11f, fill(Wool))
+        }
     }
 
     /** Patte avant : moufle au bord festonné, deux sillons pour les griffes. */
@@ -234,10 +273,12 @@ object Dragon {
         if (sleeve) {
             // La manche s'arrête au poignet : la patte et ses griffes restent visibles,
             // sinon on perd le geste des deux pattes jointes qui fait tout le personnage.
-            c.save(); c.clipPath(shape)
-            c.drawRect(RectF(70f, 120f, 112f, 150f), fill(Xmas))
-            c.drawRect(RectF(70f, 150f, 112f, 156f), fill(Wool))
-            c.restore()
+            asWear {
+                c.save(); c.clipPath(shape)
+                c.drawRect(RectF(70f, 120f, 112f, 150f), fill(Xmas))
+                c.drawRect(RectF(70f, 150f, 112f, 156f), fill(Wool))
+                c.restore()
+            }
         }
 
         val claw = stroke(PinkDeep, 2.4f)
