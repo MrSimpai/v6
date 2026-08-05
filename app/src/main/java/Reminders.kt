@@ -13,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.example.medtap.MainActivity
 import com.example.medtap.R
 import com.example.medtap.data.Db
+import com.example.medtap.data.DoseLog
 import com.example.medtap.data.Medication
 import com.example.medtap.data.Slots
 import com.example.medtap.data.outstandingToday
@@ -373,6 +374,24 @@ object Reminders {
         if (NotificationManagerCompat.from(ctx).areNotificationsEnabled()) {
             NotificationManagerCompat.from(ctx).notify(notifId(med.tagId) + 1, yay)
         }
+    }
+
+    /**
+     * Enregistrer une dose depuis un endroit qui n'est pas l'écran : le widget, un
+     * raccourci, plus tard peut-être une montre. Même chemin que le bouton de l'app —
+     * même créneau, même série, même arrêt des rappels — pour que les deux ne puissent
+     * pas raconter deux histoires différentes.
+     */
+    fun logFromOutside(ctx: Context, med: Medication) = CoroutineScope(Dispatchers.IO).launch {
+        val dao = Db.get(ctx).dao()
+        if (!Slots.canLogNow(med)) return@launch
+        val slot = Slots.todayAt(med)
+        if (dao.logForSlot(med.tagId, slot) != null) return@launch
+        dao.insert(DoseLog(tagId = med.tagId, scheduledFor = slot, takenAt = System.currentTimeMillis()))
+        resolve(ctx, med, slot)
+        val meds = dao.activeMedsOnce()
+        val complete = meds.all { dao.logForSlot(it.tagId, Slots.todayAt(it)) != null }
+        celebrate(ctx, med, slot, 0, if (complete) dao.perfectDayStreak(meds) else 0)
     }
 
     fun rescheduleAll(ctx: Context) = CoroutineScope(Dispatchers.IO).launch {

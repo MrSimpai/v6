@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.example.medtap.Her
 import com.example.medtap.data.DoseLog
 import com.example.medtap.data.Medication
+import com.example.medtap.data.ReminderHealth
 import com.example.medtap.data.Slots
 import com.example.medtap.data.isManual
 import java.text.SimpleDateFormat
@@ -32,6 +33,8 @@ data class HomeState(
     val owned: Set<String> = emptySet(),   // cosmétiques gagnés
     val worn: Set<String> = emptySet(),    // cosmétiques portés
     val chestReward: String? = null,
+    val batteryRestricted: Boolean = false,
+    val freezeUsed: Boolean = false,
     val pairing: Boolean = false,
     val hasNfc: Boolean = true,
     val nfcOff: Boolean = false
@@ -51,6 +54,11 @@ fun HomeScreen(
     onAddMedication: () -> Unit,
     onMarkTaken: (Medication) -> Unit,
     onForget: (Medication) -> Unit,
+    onSkip: (Medication) -> Unit,
+    onEdit: (Medication) -> Unit,
+    onFixBattery: () -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
     onCancelPairing: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -104,6 +112,44 @@ fun HomeScreen(
             style = Type.Display, color = Pal.Ink
         )
 
+        if (state.freezeUsed) {
+            Spacer(Modifier.height(14.dp))
+            Surface(color = Pal.MintSoft, shape = Soft) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("Série protégée ❄️", style = Type.Title, color = Pal.Mint)
+                    Text(
+                        "Hier a sauté, mais ${Her.dragon} a utilisé ton gel de la semaine. " +
+                            "Ta série continue.",
+                        style = Type.Label, color = Pal.Muted
+                    )
+                }
+            }
+        }
+
+        if (state.batteryRestricted) {
+            Spacer(Modifier.height(14.dp))
+            Surface(color = Pal.Card, shape = Soft) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("Les rappels risquent d'être coupés", style = Type.Title, color = Pal.Apricot)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Android peut mettre l'app en veille et supprimer les rappels sans " +
+                            "prévenir. Une seule autorisation règle ça.",
+                        style = Type.Body, color = Pal.Muted
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = onFixBattery,
+                        shape = Pill,
+                        colors = ButtonDefaults.buttonColors(containerColor = Pal.Apricot),
+                        modifier = Modifier.fillMaxWidth().height(46.dp)
+                    ) { Text("Autoriser", style = Type.Title) }
+                    Spacer(Modifier.height(8.dp))
+                    Text(ReminderHealth.SAMSUNG_STEPS, style = Type.Label, color = Pal.Muted)
+                }
+            }
+        }
+
         Spacer(Modifier.height(20.dp))
 
         // ---- hero: the mascot and the prompt ----
@@ -156,7 +202,9 @@ fun HomeScreen(
                 onCancelRemove = { confirmingRemoval = null },
                 onConfirmRemove = { confirmingRemoval = null; onForget(med) },
                 log = state.logs.firstOrNull { it.tagId == med.tagId && it.scheduledFor == slot },
-                onMarkTaken = { onMarkTaken(med) }
+                onMarkTaken = { onMarkTaken(med) },
+                onSkip = { onSkip(med) },
+                onEdit = { onEdit(med) }
             )
             Spacer(Modifier.height(10.dp))
         }
@@ -200,7 +248,17 @@ fun HomeScreen(
             }
         }
 
-        Spacer(Modifier.height(36.dp))
+        Spacer(Modifier.height(30.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            TextButton(onClick = onBackup) {
+                Text("Sauvegarder", style = Type.Label, color = Pal.Iris)
+            }
+            TextButton(onClick = onRestore) {
+                Text("Restaurer", style = Type.Label, color = Pal.Muted)
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
         Text(
             Her.dedication,
             style = Type.Label, color = Pal.Muted,
@@ -226,7 +284,9 @@ private fun MedRow(
     onAskRemove: () -> Unit,
     onCancelRemove: () -> Unit,
     onConfirmRemove: () -> Unit,
-    onMarkTaken: () -> Unit
+    onMarkTaken: () -> Unit,
+    onSkip: () -> Unit,
+    onEdit: () -> Unit
 ) {
     Surface(
         color = if (taken) Pal.MintSoft else Pal.Card,
@@ -248,8 +308,12 @@ private fun MedRow(
                     )
                 }
                 Text(
-                    if (taken && log != null) "Pris à ${clock.format(Date(log.takenAt))}"
-                    else if (due) "À prendre" else "Plus tard",
+                    when {
+                        log?.skipped == true -> "Sautée"
+                        taken && log != null -> "Pris à ${clock.format(Date(log.takenAt))}"
+                        due -> "À prendre"
+                        else -> "Plus tard"
+                    },
                     style = Type.Label,
                     color = if (taken) Pal.Mint else Pal.Apricot
                 )
@@ -274,6 +338,14 @@ private fun MedRow(
                         style = Type.Label, color = Pal.Muted
                     )
                 }
+
+                // Sauter volontairement, sans mentir à l'historique. Sans ce bouton, une
+                // bouteille vide ou une pause prescrite ne laisse qu'un choix : noter une
+                // dose jamais prise. C'est le graphique qu'on montre à un médecin.
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) {
+                    Text("Pas aujourd'hui", style = Type.Label, color = Pal.Muted)
+                }
             }
 
             // Removal is two deliberate taps, and the second one is never in the place
@@ -281,6 +353,9 @@ private fun MedRow(
             Spacer(Modifier.height(8.dp))
             if (!confirmingRemoval) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onEdit) {
+                        Text("Modifier", style = Type.Label, color = Pal.Iris)
+                    }
                     TextButton(onClick = onAskRemove) {
                         Text("Retirer", style = Type.Label, color = Pal.Muted)
                     }

@@ -308,6 +308,57 @@ Storage is Room table `OwnedCosmetic`, added in schema **version 2** with a real
 that creates the table. Emphatically not `fallbackToDestructiveMigration`, which would
 erase months of dose history to make room for a hat.
 
+## Streak freezes
+
+One missed day used to reset everything to zero, which is exactly the clean break that
+makes people quit. A freeze is **free, automatic and silent**: `useFreezeIfNeeded()` runs
+on resume, and if yesterday lapsed while a streak was running, it spends the week's freeze
+and the streak survives. One per seven days, no more, or the number stops meaning anything.
+
+It only fires when there was something to protect. Freezing a day when the streak was
+already dead would waste the only one available for nothing.
+
+## Skipping a dose deliberately
+
+Empty bottle, prescribed pause, sick day. Without a skip button the only way to silence
+the dragon is to log a dose that was never swallowed -- and that's the chart you'd hand a
+doctor. **Pas aujourd'hui** writes a normal `DoseLog` with `skipped = true`: reminders
+stop, the streak holds, and the drift chart plots nothing, because there is nothing to
+plot.
+
+## Reminders that actually fire
+
+The real failure mode on Samsung -- the S25 included -- is One UI putting the app to sleep
+and dropping its alarms without a word. The symptom is the worst possible one for a
+medication app: nothing arrives, and nobody notices.
+
+The home screen shows a card whenever `isIgnoringBatteryOptimizations` is false, with a
+one-tap fix, plus the exact One UI path (Batterie → Limites d'utilisation en arrière-plan
+→ Applications jamais mises en veille), because the system dialog alone isn't enough on
+Samsung.
+
+## Backup
+
+Local JSON to a file she picks: medications, every log, cosmetics, freezes. No account, no
+cloud, no server to keep alive in five years -- a file she can drop in Drive and forget is
+the only backup format that outlives whoever wrote the app.
+
+Restore is **additive**. Nothing is deleted, everything is merged. A restore that starts by
+emptying the database is a restore that destroys what it was meant to save when the file
+turns out to be wrong.
+
+## The widget
+
+Dragon, current state, and a button that logs the dose without opening anything -- the
+shortest possible path between remembering and having recorded it. It goes through
+`Reminders.logFromOutside`, the same slot matching and streak counting as the in-app
+button, so the two can never tell different stories.
+
+## Editing a medication
+
+Same screen as adding, with `existing` filled in. The key is preserved: it's what ties a
+medication to its whole history, and losing that to fix a typo would be absurd.
+
 ## Removing a medication
 
 Two deliberate taps. **Retirer** replaces the row's footer with a confirmation panel, and

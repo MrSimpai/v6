@@ -32,18 +32,22 @@ import java.util.Locale
 @Composable
 fun AddMedicationScreen(
     onDismiss: () -> Unit,
-    onConfirm: (Medication, Boolean) -> Unit
+    onConfirm: (Medication, Boolean) -> Unit,
+    existing: Medication? = null
 ) {
-    var name by remember { mutableStateOf("") }
-    var dose by remember { mutableStateOf("1 comprimé") }
-    var hour by remember { mutableStateOf(9) }
-    var minute by remember { mutableStateOf(0) }
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    var dose by remember { mutableStateOf(existing?.doseText ?: "1 comprimé") }
+    var hour by remember { mutableStateOf(existing?.hourOfDay ?: 9) }
+    var minute by remember { mutableStateOf(existing?.minute ?: 0) }
 
+    // En modification on garde la clé : c'est elle qui relie le médicament à tout son
+    // historique. La perdre pour corriger une faute de frappe serait absurde.
     fun draft() = Medication(
-        tagId = "",                                   // rempli à l'enregistrement
+        tagId = existing?.tagId ?: "",
         name = name.ifBlank { "Mon médicament" },
         doseText = dose.ifBlank { "1 dose" },
-        hourOfDay = hour, minute = minute
+        hourOfDay = hour, minute = minute,
+        nagEveryMinutes = existing?.nagEveryMinutes ?: 10
     )
 
     Box(Modifier.fillMaxSize().background(Pal.Mist)) {
@@ -55,13 +59,19 @@ fun AddMedicationScreen(
                 .padding(top = 24.dp, bottom = 40.dp)
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("NOUVEAU", style = Type.Label, color = Pal.Muted, modifier = Modifier.weight(1f))
+                Text(
+                    if (existing == null) "NOUVEAU" else "MODIFIER",
+                    style = Type.Label, color = Pal.Muted, modifier = Modifier.weight(1f)
+                )
                 TextButton(onClick = onDismiss) {
                     Text("Annuler", style = Type.Label, color = Pal.Muted)
                 }
             }
             Spacer(Modifier.height(4.dp))
-            Text("Un médicament de plus", style = Type.Display, color = Pal.Ink)
+            Text(
+                if (existing == null) "Un médicament de plus" else existing.name,
+                style = Type.Display, color = Pal.Ink
+            )
             Spacer(Modifier.height(6.dp))
             Text(
                 "Le nom, la dose, et l'heure du rappel. C'est tout ce qu'il faut.",
@@ -103,21 +113,23 @@ fun AddMedicationScreen(
                 shape = Pill,
                 colors = ButtonDefaults.buttonColors(containerColor = Pal.Iris),
                 modifier = Modifier.fillMaxWidth().height(54.dp)
-            ) { Text("Ajouter", style = Type.Title) }
+            ) { Text(if (existing == null) "Ajouter" else "Enregistrer", style = Type.Title) }
 
-            Spacer(Modifier.height(4.dp))
-            TextButton(
-                onClick = { onConfirm(draft(), true) },
-                enabled = name.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Ou lier une étiquette NFC maintenant", style = Type.Body, color = Pal.Iris)
+            if (existing == null) {
+                Spacer(Modifier.height(4.dp))
+                TextButton(
+                    onClick = { onConfirm(draft(), true) },
+                    enabled = name.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Ou lier une étiquette NFC maintenant", style = Type.Body, color = Pal.Iris)
+                }
+                Text(
+                    "Une étiquette collée sur la bouteille permet d'enregistrer la dose en " +
+                        "approchant le téléphone. Ça se fait très bien plus tard.",
+                    style = Type.Label, color = Pal.Muted
+                )
             }
-            Text(
-                "Une étiquette collée sur la bouteille permet d'enregistrer la dose en " +
-                    "approchant le téléphone. Ça se fait très bien plus tard.",
-                style = Type.Label, color = Pal.Muted
-            )
         }
     }
 }

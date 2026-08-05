@@ -5,6 +5,8 @@ import android.content.Intent
 import android.app.KeyguardManager
 import android.nfc.NfcAdapter
 import android.os.PowerManager
+import android.provider.Settings
+import com.example.medtap.reminder.DragonWidget
 import android.nfc.Tag
 import android.os.Build
 import android.os.Bundle
@@ -17,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
 import com.example.medtap.data.*
 import com.example.medtap.reminder.Reminders
@@ -34,6 +37,22 @@ class MainActivity : ComponentActivity() {
     private var pendingMed: Medication? = null      // waiting to be bound to a fresh tag
 
     @Volatile private var resumed = false
+    private var editing = mutableStateOf<Medication?>(null)
+
+    private val createBackup =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            uri ?: return@registerForActivityResult
+            lifecycleScope.launch(Dispatchers.IO) { Backup.export(this@MainActivity, uri) }
+        }
+
+    private val openBackup =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            lifecycleScope.launch(Dispatchers.IO) {
+                Backup.import(this@MainActivity, uri)
+                Reminders.rescheduleAll(this@MainActivity)
+            }
+        }
 
     private val askNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -69,6 +88,11 @@ class MainActivity : ComponentActivity() {
                     onAddMedication = { showAdd = true },
                     onMarkTaken = { med -> logDose(med) },
                     onForget = { med -> forget(med) },
+                    onSkip = { med -> skipDose(med) },
+                    onEdit = { med -> editing.value = med },
+                    onFixBattery = { requestBatteryExemption() },
+                    onBackup = { createBackup.launch(Backup.suggestedFileName()) },
+                    onRestore = { openBackup.launch(arrayOf("application/json")) },
                     onCancelPairing = {
                         pendingMed = null
                         state.value = state.value.copy(pairing = false)
@@ -102,6 +126,16 @@ class MainActivity : ComponentActivity() {
                         modifier = androidx.compose.ui.Modifier
                             .align(androidx.compose.ui.Alignment.BottomCenter)
                             .padding(bottom = 14.dp)
+                    )
+                }
+                editing.value?.let { med ->
+                    AddMedicationScreen(
+                        onDismiss = { editing.value = null },
+                        onConfirm = { draft, _ ->
+                            editing.value = null
+                            saveMedication(draft)
+                        },
+                        existing = med
                     )
                 }
                 if (showAdd) AddMedicationScreen(
@@ -216,6 +250,35 @@ class MainActivity : ComponentActivity() {
         dao.setEquipped(id, true)
     }
 
+    /**
+     * Sauter volontairement. La dose est écrite comme n'importe quelle autre, avec un
+     * drapeau : les rappels s'arrêtent, la série tient, et le graphique de dérive ne
+     * trace rien, parce qu'il n'y a rien à tracer.
+     */
+    private fun skipDose(med: Medication) = lifecycleScope.launch(Dispatchers.IO) {
+        val dao = Db.get(this@MainActivity).dao()
+        val slot = Slots.todayAt(med)
+        if (dao.logForSlot(med.tagId, slot) != null) return@launch
+        dao.insert(
+            DoseLog(
+                tagId = med.tagId, scheduledFor = slot,
+                takenAt = System.currentTimeMillis(), skipped = true
+            )
+        )
+        Reminders.resolve(this@MainActivity, med, slot)
+    }
+
+    private fun requestBatteryExemption() {
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(android.net.Uri.parse("package:$packageName"))
+            )
+        }.onFailure {
+            runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+        }
+    }
+
     /** Remove a medication and its history. Alarms first, so nothing fires into a void. */
     private fun forget(med: Medication) = lifecycleScope.launch(Dispatchers.IO) {
         Reminders.cancelAll(this@MainActivity, med)
@@ -229,6 +292,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        // Hier a-t-il sauté ? Si oui et qu'une série était en cours, le gel part tout seul.
+        lifecycleScope.launch(Dispatchers.IO) {
+            val used = Db.get(this@MainActivity).dao().useFreezeIfNeeded()
+            if (used) withContext(Dispatchers.Main) {
+                state.value = state.value.copy(freezeUsed = true)
+            }
+        }
         state.value = state.value.copy(nfcOff = nfc != null && !nfc!!.isEnabled)
         // Reader mode beats foreground dispatch: no intent round-trip, and it suppresses
         // the system's own tag-discovered sound so the app owns the feedback.
@@ -324,8 +394,10 @@ class MainActivity : ComponentActivity() {
                         logs = logs,
                         takenSlots = logs.map { it.tagId to it.scheduledFor }.toSet(),
                         owned = cosmetics.map { it.id }.toSet(),
-                        worn = cosmetics.filter { it.equipped }.map { it.id }.toSet()
+                        worn = cosmetics.filter { it.equipped }.map { it.id }.toSet(),
+                        batteryRestricted = !ReminderHealth.batteryUnrestricted(this@MainActivity)
                     )
+                    DragonWidget.refresh(this@MainActivity)
                 }
         }
     }

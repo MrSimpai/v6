@@ -48,7 +48,9 @@ data class DoseLog(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val tagId: String,
     val scheduledFor: Long,             // epoch millis of the slot
-    val takenAt: Long                   // epoch millis of the scan
+    val takenAt: Long,                  // epoch millis of the scan
+    /** Vraie quand la dose a été volontairement sautée plutôt que prise. */
+    val skipped: Boolean = false
 )
 
 /** Minutes late (negative = early). An extension, so Room doesn't try to persist it. */
@@ -69,6 +71,9 @@ interface MedDao {
 
     @Query("SELECT * FROM DoseLog WHERE takenAt >= :since ORDER BY takenAt DESC")
     fun logsSince(since: Long): Flow<List<DoseLog>>
+
+    @Query("SELECT * FROM DoseLog")
+    suspend fun allLogs(): List<DoseLog>
 
     @Query("SELECT * FROM DoseLog WHERE tagId = :tagId AND scheduledFor = :slot LIMIT 1")
     suspend fun logForSlot(tagId: String, slot: Long): DoseLog?
@@ -93,9 +98,38 @@ interface MedDao {
 
     @Query("UPDATE OwnedCosmetic SET equipped = :on WHERE id = :id")
     suspend fun setEquipped(id: String, on: Boolean)
+
+    @Query("SELECT dayStart FROM StreakFreeze")
+    suspend fun freezeDays(): List<Long>
+
+    @Query("SELECT * FROM StreakFreeze WHERE usedAt >= :since")
+    suspend fun freezesSince(since: Long): List<StreakFreeze>
+
+    @Query("SELECT * FROM StreakFreeze WHERE dayStart = :day LIMIT 1")
+    suspend fun freezeFor(day: Long): StreakFreeze?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertFreeze(f: StreakFreeze)
+
+    @Query("SELECT * FROM StreakFreeze")
+    suspend fun allFreezes(): List<StreakFreeze>
 }
 
 /** Une pièce cosmétique gagnée. La table ne grandit jamais que d'une ligne par jour. */
+/**
+ * Une journée manquée mais pardonnée.
+ *
+ * Sans ça, un seul mauvais jour remet tout à zéro — et c'est précisément la rupture nette
+ * qui fait abandonner les gens. Le gel est gratuit, automatique et silencieux : elle
+ * n'a rien à activer et rien à acheter. Un par semaine, pas plus, sinon la série ne veut
+ * plus rien dire.
+ */
+@Entity
+data class StreakFreeze(
+    @PrimaryKey val dayStart: Long,     // minuit du jour gelé
+    val usedAt: Long
+)
+
 @Entity
 data class OwnedCosmetic(
     @PrimaryKey val id: String,
@@ -110,9 +144,40 @@ data class OwnedCosmetic(
  */
 suspend fun MedDao.perfectDayStreak(meds: List<Medication>): Int {
     if (meds.isEmpty()) return 0
+    val frozen = freezeDays().toSet()
     var n = 0
-    while (n < 3650 && meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, n)) != null }) n++
+    while (n < 3650) {
+        val done = meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, n)) != null }
+        if (!done && Slots.dayStart(n) !in frozen) return n
+        n++
+    }
     return n
+}
+
+/**
+ * Appelée au démarrage : si hier a sauté alors qu'une série était en cours, on dépense le
+ * gel de la semaine et la série survit. Silencieux — [Reminders] s'occupe de le dire.
+ *
+ * Le gel n'est posé que s'il y avait quelque chose à protéger : geler avant-hier quand la
+ * série était déjà morte gaspillerait le seul de la semaine pour rien.
+ */
+suspend fun MedDao.useFreezeIfNeeded(): Boolean {
+    val meds = activeMedsOnce()
+    if (meds.isEmpty()) return false
+
+    val yesterday = Slots.dayStart(1)
+    if (freezeFor(yesterday) != null) return false
+    if (meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 1)) != null }) return false
+
+    val hadStreak = meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 2)) != null } ||
+        Slots.dayStart(2) in freezeDays().toSet()
+    if (!hadStreak) return false
+
+    val week = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+    if (freezesSince(week).isNotEmpty()) return false
+
+    insertFreeze(StreakFreeze(yesterday, System.currentTimeMillis()))
+    return true
 }
 
 /** Medications whose dose for today has not been logged yet. */
@@ -134,9 +199,23 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/**
+ * Version 3 : les doses sautées et les gels de série. La colonne `skipped` arrive avec une
+ * valeur par défaut, donc tout l'historique existant reste lisible tel quel.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE DoseLog ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS StreakFreeze (" +
+                "dayStart INTEGER NOT NULL, usedAt INTEGER NOT NULL, PRIMARY KEY(dayStart))"
+        )
+    }
+}
+
 @Database(
-    entities = [Medication::class, DoseLog::class, OwnedCosmetic::class],
-    version = 2, exportSchema = false
+    entities = [Medication::class, DoseLog::class, OwnedCosmetic::class, StreakFreeze::class],
+    version = 3, exportSchema = false
 )
 abstract class Db : RoomDatabase() {
     abstract fun dao(): MedDao
@@ -145,7 +224,7 @@ abstract class Db : RoomDatabase() {
         @Volatile private var instance: Db? = null
         fun get(ctx: Context): Db = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "medtap.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
     }
@@ -192,6 +271,15 @@ object Slots {
      */
     fun slotDaysAgo(med: Medication, days: Int, now: Long = System.currentTimeMillis()): Long =
         atTimeOn(med, now).apply { add(Calendar.DAY_OF_YEAR, -days) }.timeInMillis
+
+    /** Minuit du jour situé [daysAgo] jours en arrière. */
+    fun dayStart(daysAgo: Int, now: Long = System.currentTimeMillis()): Long =
+        Calendar.getInstance().apply {
+            timeInMillis = now
+            add(Calendar.DAY_OF_YEAR, -daysAgo)
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
 
     /** True once the dose is due, or within [EARLY_WINDOW] of being due. */
     fun canLogNow(med: Medication, now: Long = System.currentTimeMillis()): Boolean =
