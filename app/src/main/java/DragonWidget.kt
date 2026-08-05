@@ -79,13 +79,16 @@ class DragonWidget : AppWidgetProvider() {
                     // où les bottes et le hoodie se voient, et une tenue qu'on ne croise
                     // jamais ne vaut pas la peine d'être gagnée.
                     setImageViewBitmap(R.id.widget_dragon, Dragon.bitmap(240, mood, worn))
+                    setImageViewBitmap(R.id.widget_bg, NotifArt.widgetBg(400, mood))
                     setTextViewText(R.id.widget_mood, moodText)
 
                     if (streak > 0) {
                         setViewVisibility(R.id.widget_streak, View.VISIBLE)
                         setTextViewText(
                             R.id.widget_streak,
-                            if (streak == 1) "1 jour ❄" else "$streak jours"
+                            // Le carré est petit : le chiffre seul, en pastille sur le
+                            // dragon. « jours » n'apprend rien à qui regarde un compteur.
+                            "$streak"
                         )
                         setTextViewText(R.id.widget_line, FloMessages.dayStreakLine(streak))
                         setViewVisibility(R.id.widget_line, View.VISIBLE)
@@ -95,8 +98,7 @@ class DragonWidget : AppWidgetProvider() {
                     }
 
                     // Tout le widget ouvre l'app : il n'y a qu'une seule chose à y faire.
-                    setOnClickPendingIntent(
-                        R.id.widget_dragon,
+                    val open =
                         PendingIntent.getActivity(
                             app, 0,
                             Intent(app, MainActivity::class.java).addFlags(
@@ -104,7 +106,9 @@ class DragonWidget : AppWidgetProvider() {
                             ),
                             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                         )
-                    )
+                    setOnClickPendingIntent(R.id.widget_bg, open)
+                    setOnClickPendingIntent(R.id.widget_dragon, open)
+                    setOnClickPendingIntent(R.id.widget_mood, open)
                 }
                 ids.forEach { mgr.updateAppWidget(it, views) }
             }

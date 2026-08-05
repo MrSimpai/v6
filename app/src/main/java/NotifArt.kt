@@ -11,6 +11,75 @@ import com.example.medtap.ui.Mood
  */
 object NotifArt {
 
+    /**
+     * Le fond du widget, peint plutôt que déclaré.
+     *
+     * Une forme XML ne sait faire qu'un dégradé : posé sur un fond d'écran, ça reste un
+     * rectangle inerte. Ici on peut y mettre des écailles et des étincelles, et faire
+     * varier la couleur selon l'humeur — le widget change donc d'ambiance dans la journée,
+     * ce qui est la moitié de l'intérêt d'avoir un dragon sur son écran d'accueil.
+     *
+     * Les coins sont découpés dans le bitmap lui-même, pas dans un arrière-plan séparé :
+     * un seul calque, aucun risque de liseré blanc qui dépasse.
+     */
+    fun widgetBg(px: Int, mood: Mood): Bitmap {
+        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        val s = px / 400f
+
+        val (a, b) = when (mood) {
+            Mood.Overdue  -> 0xFFF7D9D4.toInt() to 0xFFE9A9A2.toInt()
+            Mood.Sad      -> 0xFFF3E4EE.toInt() to 0xFFD9C2DC.toInt()
+            Mood.Cheering -> 0xFFDDF3EA.toInt() to 0xFFA9DCC8.toInt()
+            Mood.Waiting  -> 0xFFFFEEDA.toInt() to 0xFFF6C9A4.toInt()
+            Mood.Sleeping -> 0xFFDEF0F2.toInt() to 0xFFA8D4DA.toInt()
+        }
+
+        val round = RectF(0f, 0f, px.toFloat(), px.toFloat())
+        val radius = 56f * s
+        p.shader = LinearGradient(0f, 0f, px * 0.6f, px.toFloat(), a, b, Shader.TileMode.CLAMP)
+        c.drawRoundRect(round, radius, radius, p)
+        p.shader = null
+
+        // écailles, très discrètes : la texture se sent plus qu'elle ne se voit
+        c.save()
+        Path().apply { addRoundRect(round, radius, radius, Path.Direction.CW) }
+            .also { c.clipPath(it) }
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 3f * s
+        p.color = 0x18FFFFFF
+        for (row in 0..7) for (col in 0..7) {
+            val ox = col * 58f * s + (row % 2) * 29f * s
+            c.drawArc(
+                RectF(ox, row * 52f * s, ox + 50f * s, row * 52f * s + 50f * s),
+                180f, 180f, false, p
+            )
+        }
+        p.style = Paint.Style.FILL
+
+        // trois étincelles blanches, comme des reflets
+        p.color = 0x66FFFFFF
+        listOf(
+            Triple(60f, 74f, 16f), Triple(344f, 120f, 12f), Triple(310f, 46f, 8f)
+        ).forEach { (x, y, r) ->
+            sparkle(c, p, x * s, y * s, r * s)
+        }
+        c.restore()
+        return bmp
+    }
+
+    private fun sparkle(c: Canvas, p: Paint, cx: Float, cy: Float, r: Float) {
+        Path().apply {
+            moveTo(cx, cy - r)
+            quadTo(cx + r * 0.28f, cy - r * 0.28f, cx + r, cy)
+            quadTo(cx + r * 0.28f, cy + r * 0.28f, cx, cy + r)
+            quadTo(cx - r * 0.28f, cy + r * 0.28f, cx - r, cy)
+            quadTo(cx - r * 0.28f, cy - r * 0.28f, cx, cy - r)
+            close()
+        }.also { c.drawPath(it, p) }
+    }
+
     fun banner(mood: Mood, title: String, body: String, w: Int = 1024, h: Int = 512): Bitmap {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
