@@ -211,7 +211,21 @@ Both walk backwards with `Calendar.add(DAY_OF_YEAR, -1)` rather than subtracting
 a day is 23 or 25 hours long -- millisecond arithmetic lands an hour off, finds no log,
 and silently resets a streak of any length to one. Twice a year, invisibly.
 
-### Where the celebration lands
+### Two message sets, and which is which
+
+`FloMessages` holds two celebration pools, and getting them the wrong way round makes the
+good one nearly unreachable.
+
+`dayStreakLine(days)` is the **hand-written diary** -- one line per day, 1 through 32.
+These read like a running conversation, so they belong to the *day* streak: "jour 17 des
+cacahuètes" makes no sense if the number jumps three times a day. This is what shows on
+the full-screen page, and in the notification when the day completes while she's away.
+
+`celebration(streak, seed)` is the short generic confirmation for **one dose when others
+are still owed** that day. Deliberately plain: a medication taken three times daily would
+otherwise burn through all 32 hand-written lines in eleven days.
+
+## Where the celebration lands
 
 The last dose of the day gets a different treatment depending on where she is when it
 happens, because the same news needs a different shape in each place.
@@ -229,6 +243,27 @@ phone *launches* the activity, which resumes behind the lock screen. So `watchin
 also requires the display to be on and the keyguard down. When she is watching, no
 notification is posted at all -- the cheering dragon on screen is already the message,
 and a notification on top would be the same news twice.
+
+## The evening countdown
+
+At 21h, if anything is still unlogged, a notification appears with a **live ticking clock
+counting down to midnight** -- the moment the day, and the streak, turns over.
+
+The ticking is the whole point, and it's why this uses `setUsesChronometer` +
+`setChronometerCountDown` rather than writing the remaining time into the text. A sentence
+saying "il reste 2 heures" is frozen at whatever it said when it was posted, and it's a
+fact you read. A clock visibly counting down is handed to the system, stays accurate
+without the app waking up once, and reads as pressure. That's the Duolingo trick.
+
+`setTimeoutAfter(midnight - now)` makes it delete itself exactly as the countdown hits
+zero, so there's never a dead countdown sitting in the shade at 3am.
+
+`refreshLastCall()` is called both by the 21h alarm and after any dose is logged, and it
+decides for itself whether to post or clear. So logging the last pill at 22h makes the
+countdown vanish on its own, and it re-arms tomorrow's alarm on the way out.
+
+It uses its own channel (*Série en jeu*, `IMPORTANCE_DEFAULT`), so it can be muted
+separately from the reminder itself without losing the thing that actually matters.
 
 ## Removing a medication
 

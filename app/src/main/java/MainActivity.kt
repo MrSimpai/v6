@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
         // not finished, however early it is.
         val meds = dao.activeMedsOnce()
         val complete = meds.all { dao.logForSlot(it.tagId, Slots.todayAt(it)) != null }
-        val days = if (complete) perfectDayStreak(dao, meds) else 0
+        val days = if (complete) dao.perfectDayStreak(meds) else 0
 
         val inApp = withContext(Dispatchers.Main) { watchingNow() }
 
@@ -225,13 +225,6 @@ class MainActivity : ComponentActivity() {
         return n
     }
 
-    /** Consecutive days ending today where *every* medication was logged. */
-    private suspend fun perfectDayStreak(dao: MedDao, meds: List<Medication>): Int {
-        if (meds.isEmpty()) return 0
-        var n = 0
-        while (n < 3650 && meds.all { dao.logForSlot(it.tagId, Slots.slotDaysAgo(it, n)) != null }) n++
-        return n
-    }
 
     // ---- data --------------------------------------------------------------
 
@@ -242,6 +235,7 @@ class MainActivity : ComponentActivity() {
             combine(dao.activeMeds(), dao.logsSince(since)) { meds, logs -> meds to logs }
                 .collect { (meds, logs) ->
                     meds.forEach { Reminders.scheduleNext(this@MainActivity, it) }
+                    Reminders.scheduleLastCall(this@MainActivity)
                     state.value = state.value.copy(
                         meds = meds,
                         logs = logs,

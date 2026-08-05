@@ -81,6 +81,22 @@ interface MedDao {
     suspend fun deleteMed(tagId: String)
 }
 
+/**
+ * Consecutive days ending today where EVERY medication was logged. Lives here rather than
+ * in the activity because both the UI and the reminder receiver need the same number, and
+ * two copies of a streak calculation is two chances to disagree about what day it is.
+ */
+suspend fun MedDao.perfectDayStreak(meds: List<Medication>): Int {
+    if (meds.isEmpty()) return 0
+    var n = 0
+    while (n < 3650 && meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, n)) != null }) n++
+    return n
+}
+
+/** Medications whose dose for today has not been logged yet. */
+suspend fun MedDao.outstandingToday(meds: List<Medication>): List<Medication> =
+    meds.filter { logForSlot(it.tagId, Slots.todayAt(it)) == null }
+
 @Database(entities = [Medication::class, DoseLog::class], version = 1, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): MedDao

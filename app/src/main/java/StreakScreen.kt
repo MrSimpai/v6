@@ -129,7 +129,7 @@ fun StreakCelebration(days: Int, onDismiss: () -> Unit) {
             Mascot(
                 Mood.Cheering,
                 Modifier
-                    .size(190.dp)
+                    .size(168.dp)
                     .scale(0.6f + 0.4f * enter.value)
             )
 
@@ -164,16 +164,21 @@ fun StreakCelebration(days: Int, onDismiss: () -> Unit) {
 
             Spacer(Modifier.height(26.dp))
 
+            // The hand-written lines vary wildly in length -- "UNE SEMAINE! ça passe
+            // vite" next to a full verse of Life Is A Highway. Step the size down for the
+            // long ones so a good joke never gets clipped off the bottom of the screen.
+            val message = FloMessages.dayStreakLine(days)
             Text(
-                FloMessages.dayStreakLine(days),
-                style = Type.Title, color = Pal.Ink,
+                message,
+                style = if (message.length <= 58) Type.Title else Type.Body,
+                color = Pal.Ink,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.alpha(enter.value)
             )
             Spacer(Modifier.height(8.dp))
             Text(
                 "Plus rien à prendre aujourd'hui, ${Her.name}. ${Her.dragon} va se coucher.",
-                style = Type.Body, color = Pal.Muted,
+                style = Type.Label, color = Pal.Muted,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.alpha(enter.value)
             )

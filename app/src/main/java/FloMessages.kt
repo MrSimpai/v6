@@ -166,57 +166,82 @@ object FloMessages {
         return tier to FloLine(picked.title, body)
     }
 
+    /**
+     * La confirmation d'UNE dose, quand il en reste d'autres pour la journée. Court
+     * exprès : les lignes écrites à la main sont réservées à la journée complète, sinon
+     * elles se feraient brûler par un médicament pris trois fois par jour.
+     */
     fun celebration(streak: Int, seed: Long): FloLine {
         val title = PRIS[Random(seed).nextInt(PRIS.size)]
-        val body = when (streak) {
-            in Int.MIN_VALUE..1 -> "Streak uno, let's go FLOOoo! (Je touche du bois que l'app marche 😅)"
-            2  -> "$streak jours, c'est bon signe tu es revenue!"
-            3  -> "jamais deux sans toi 😊"
-            4  -> "Jour 4, je veux une kitkat"
-            5  -> "$streak jours, jour pour jour"
-            6  -> "$streak jours, vélo jusqu'à la crémerie la plus proche? 😙🍦😛"
-            7  -> "UNE SEMAINE! ça passe vite"
-            8  -> "$streak jours, 🤘 STREAK ON! STEAK ONN! STREAKK ONnnn🎸"
-            9  -> "$streak jours, j'espère que tu passes la meilleure journée!"
-            10 -> "Tu as gagné un coupon pour 10 bisous gratuits 😘"
-            11 -> "$streak jours, j'aime bien procrastiner mon rapport de stage 🤭"
-            12 -> "$streak jours, salut Flo du futur! Est-ce que tu es rendue chef de quart 🤔"
-            13 -> "$streak jours, recommande-moi un de tes albums préf 💽"
-            14 -> "14 jours youpi, j'espère qu'on a eu de belles dates depuis que j'écris ça haha"
-            15 -> "$streak jours, je t'aime toujours"
-            16 -> "$streak jours, raconte-moi ta journée 🤗🍿"
-            17 -> "Jour 17, des cacahuètes? 😆 jsp quoi écrire"
-            18 -> "dix huîtres jours, faudrait aller manger des huîtres😋"
-            19 -> "$streak jours, on est dus pour aller cueillir des nouvelles fleurs 🌸💮💘"
-            20 -> "$streak jours, dis-moi le mot avocat sans contexte hihi"
-            21 -> "$streak jours, je tiens le compte Floski mais mettre des emoji c'est long😭"
-            22 -> "$streak jours, l'été s'achève! est-ce qu'on a fait du bateau🥺"
-            23 -> "LIFE IS A HIGHWAYyy I WANT TO RIDE IT ALL NIGHT LONggg, ah euhh 23 jours youpiii"
-            24 -> "$streak jours, perds pas ta série demain c'est un bon 💋"
-            25 -> "25 jours = 25 sushis date 🍣😏"
-            26 -> "$streak jours, pickles ball?!"
-            27 -> "Jour 27, t'as des trous dans tes bobettes🎜🎝🎜"
-            28 -> "$streak jours, est-ce que je t'ai déjà dit que tu as de beaux yeux?👀"
-            29 -> "$streak jours, pis McGill pas trop pire?!"
-            30 -> "$streak jours! c'est pas 5 ans de Duolingo mais quand même! Fini les messages custom😅, je t'aime fort 😍"
-            31 -> "$streak jours! 👏 fini les messages custom 😔"
-            32 -> "$streak jours.. 👏 dernier message custom pour de vrai😔"
-            else -> "$streak jours!"
+        val body = when {
+            streak <= 1 -> "Enregistré."
+            streak < 7  -> "$streak jours de suite pour celui-là."
+            streak < 30 -> "Série de $streak jours pour celui-là."
+            else        -> "$streak jours pour celui-là. Impressionnant."
         }
         return FloLine(title, body)
     }
 
     /**
-     * Affichée dans l'app, pas dans une notification, quand la dernière dose de la journée
-     * est enregistrée. La série de la notification compte un seul médicament ; celle-ci
-     * compte les journées complètes, ce qui est le chiffre dont on est vraiment fier.
+     * La journée complète : l'écran plein si elle est dans l'app, la notification sinon.
+     *
+     * C'est ICI que vivent les lignes écrites à la main, une par jour. Elles se lisent
+     * comme un journal, donc elles appartiennent au compteur de journées complètes et pas
+     * à celui d'un médicament en particulier -- « jour 17 des cacahuètes » n'a aucun sens
+     * si le chiffre remonte trois fois par jour.
      */
-    fun dayStreakLine(days: Int): String = when {
-        days <= 1  -> "Première journée complète. On part de là."
-        days < 7   -> "$days journées complètes d'affilée."
-        days < 30  -> "$days jours d'affilée. Franchement impressionnant."
-        days < 100 -> "$days jours sans rien manquer. ${Her.name}, tu es une machine."
-        else       -> "$days jours. Je n'ai plus de mots, seulement du respect."
+    fun dayStreakLine(days: Int): String = when (days) {
+        in Int.MIN_VALUE..1 -> "Streak uno, let's go FLOOoo! (Je touche du bois que l'app marche 😅)"
+        2  -> "$days jours, c'est bon signe tu es revenue!"
+        3  -> "jamais deux sans toi 😊"
+        4  -> "Jour 4, je veux une kitkat"
+        5  -> "$days jours, jour pour jour"
+        6  -> "$days jours, vélo jusqu'à la crémerie la plus proche? 😙🍦😛"
+        7  -> "UNE SEMAINE! ça passe vite"
+        8  -> "$days jours, 🤘 STREAK ON! STEAK ONN! STREAKK ONnnn🎸"
+        9  -> "$days jours, j'espère que tu passes la meilleure journée!"
+        10 -> "Tu as gagné un coupon pour 10 bisous gratuits 😘"
+        11 -> "$days jours, j'aime bien procrastiner mon rapport de stage 🤭"
+        12 -> "$days jours, salut Flo du futur! Est-ce que tu es rendue chef de quart 🤔"
+        13 -> "$days jours, recommande-moi un de tes albums préf 💽"
+        14 -> "14 jours youpi, j'espère qu'on a eu de belles dates depuis que j'écris ça haha"
+        15 -> "$days jours, je t'aime toujours"
+        16 -> "$days jours, raconte-moi ta journée 🤗🍿"
+        17 -> "Jour 17, des cacahuètes? 😆 jsp quoi écrire"
+        18 -> "dix huîtres jours, faudrait aller manger des huîtres😋"
+        19 -> "$days jours, on est dus pour aller cueillir des nouvelles fleurs 🌸💮💘"
+        20 -> "$days jours, dis-moi le mot avocat sans contexte hihi"
+        21 -> "$days jours, je tiens le compte Floski mais mettre des emoji c'est long😭"
+        22 -> "$days jours, l'été s'achève! est-ce qu'on a fait du bateau🥺"
+        23 -> "LIFE IS A HIGHWAYyy I WANT TO RIDE IT ALL NIGHT LONggg, ah euhh 23 jours youpiii"
+        24 -> "$days jours, perds pas ta série demain c'est un bon 💋"
+        25 -> "25 jours = 25 sushis date 🍣😏"
+        26 -> "$days jours, pickles ball?!"
+        27 -> "Jour 27, t'as des trous dans tes bobettes🎜🎝🎜"
+        28 -> "$days jours, est-ce que je t'ai déjà dit que tu as de beaux yeux?👀"
+        29 -> "$days jours, pis McGill pas trop pire?!"
+        30 -> "$days jours! c'est pas 5 ans de Duolingo mais quand même! Fini les messages custom😅, je t'aime fort 😍"
+        31 -> "$days jours! 👏 fini les messages custom 😔"
+        32 -> "$days jours.. 👏 dernier message custom pour de vrai😔"
+        else -> "$days jours!"
+    }
+
+    /**
+     * Le dernier appel du soir, avec le compte à rebours vers minuit. Écrit pour être lu
+     * en diagonale : ce qui reste à prendre, et ce qu'on perd si on ne le fait pas.
+     */
+    fun lastCall(dayStreak: Int, remaining: List<String>): FloLine {
+        val what = remaining.joinToString(", ")
+        return if (dayStreak > 0)
+            FloLine(
+                "Ta série de $dayStreak jours est en jeu 🐉",
+                "$what — il te reste jusqu'à minuit. ${Her.dragon} croise les griffes."
+            )
+        else
+            FloLine(
+                "La journée n'est pas finie 🐉",
+                "$what — il te reste jusqu'à minuit, ${Her.name}."
+            )
     }
 
     fun comeback(seed: Long = System.currentTimeMillis()): FloLine =
