@@ -18,7 +18,6 @@ import com.example.medtap.data.DoseLog
 import com.example.medtap.data.Medication
 import com.example.medtap.data.Slots
 import com.example.medtap.reminder.FloMessages
-import com.example.medtap.reminder.FloMessages
 import com.example.medtap.data.isManual
 import java.text.SimpleDateFormat
 import java.util.*
