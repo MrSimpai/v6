@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.*
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
 import com.example.medtap.data.*
 import com.example.medtap.reminder.Reminders
@@ -71,6 +70,16 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MedTapTheme {
+                // Les trente premières secondes, une seule fois dans la vie de l'app.
+                // Le drapeau vit dans les préférences et non dans la base : ce n'est pas
+                // une donnée d'elle, c'est un détail d'affichage, et une restauration de
+                // sauvegarde ne doit pas lui faire relire l'introduction.
+                var welcomed by remember { mutableStateOf(seenWelcome()) }
+                if (!welcomed) {
+                    WelcomeScreen(onDone = { markWelcomeSeen(); welcomed = true })
+                    return@MedTapTheme
+                }
+
                 var showAdd by remember { mutableStateOf(false) }
                 // Explicit Box: the celebration has to sit ON TOP of the home screen,
                 // not be laid out beside it.
@@ -262,6 +271,14 @@ class MainActivity : ComponentActivity() {
      * qui occupait la place -- c'est ce qu'on attend d'une garde-robe, et ça évite un
      * message d'erreur pour un problème que l'app peut régler toute seule.
      */
+    // ---- la première ouverture ---------------------------------------------
+
+    private fun prefs() = getSharedPreferences("medtap", MODE_PRIVATE)
+
+    private fun seenWelcome(): Boolean = prefs().getBoolean(KEY_WELCOMED, false)
+
+    private fun markWelcomeSeen() = prefs().edit().putBoolean(KEY_WELCOMED, true).apply()
+
     /**
      * Ouvre la cabine d'essayage si le mot est le bon.
      *
@@ -457,7 +474,8 @@ class MainActivity : ComponentActivity() {
                         // Combien de fois, cette semaine, un rappel n'est pas parti du
                         // tout. Recalculé à chaque changement de données, donc noter la
                         // dose manquante fait disparaître l'avertissement tout seul.
-                        silentMisses = dao.silentMisses(meds)
+                        silentMisses = dao.silentMisses(meds),
+                        streak = dao.currentStreak(meds)
                     )
                     DragonWidget.refresh(this@MainActivity)
                 }
@@ -475,5 +493,9 @@ class MainActivity : ComponentActivity() {
         // the reminder wake the lock screen. A high-importance notification that bypasses
         // Do Not Disturb and re-posts every ten minutes is already impossible to miss;
         // taking over the screen on top of that was hostile.
+    }
+
+    private companion object {
+        const val KEY_WELCOMED = "welcomed"
     }
 }

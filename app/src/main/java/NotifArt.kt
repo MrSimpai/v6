@@ -69,7 +69,7 @@ object NotifArt {
      */
     fun vibeFor(mood: Mood, lateMin: Long, now: Long = System.currentTimeMillis()): Vibe =
         when (mood) {
-            Mood.Cheering -> Vibe.WIN
+            Mood.Cheering, Mood.Love, Mood.Proud -> Vibe.WIN
             Mood.Sleeping -> if (isNight(now)) Vibe.REST_NIGHT else Vibe.REST_DAY
             else -> vibeFor(Tier.forLateness(lateMin))
         }
@@ -268,13 +268,16 @@ object NotifArt {
         val c = Canvas(bmp)
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
+        // Nettement plus opaque qu'avant : sur le ciel de midi, une gélule à 35 % de noir
+        // laissait le chiffre blanc se dissoudre dans le fond. C'est la pastille qui doit
+        // porter le contraste, pas le décor — lui change huit fois par jour.
         val box = RectF(0f, 0f, w.toFloat(), hh)
-        p.color = 0x59000000
+        p.color = 0xA6000000.toInt()
         c.drawRoundRect(box, hh / 2f, hh / 2f, p)
         p.style = Paint.Style.STROKE
-        p.strokeWidth = hh * 0.05f
-        p.color = 0x40FFFFFF
-        c.drawRoundRect(box.apply { inset(hh * 0.025f, hh * 0.025f) }, hh / 2f, hh / 2f, p)
+        p.strokeWidth = hh * 0.06f
+        p.color = 0x73FFFFFF
+        c.drawRoundRect(box.apply { inset(hh * 0.03f, hh * 0.03f) }, hh / 2f, hh / 2f, p)
         p.style = Paint.Style.FILL
 
         flame(c, p, padX, hh * 0.20f, flameW, hh * 0.62f, streak > 0)
@@ -321,24 +324,38 @@ object NotifArt {
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         if (week.size != 7) return bmp
 
-        val gap = w / 7f
-        val cy = h / 2f
+        // Une gélule sombre sous les points, comme celle de la série.
+        //
+        // C'est ce qui change tout : sept petits ronds blancs posés à même le décor
+        // s'évanouissaient dès que le fond passait au clair, et les jours manqués — les
+        // plus transparents — disparaissaient complètement. Sur un fond garanti sombre,
+        // les cinq états se distinguent partout.
+        val hh = h.toFloat()
+        p.color = 0x8C000000.toInt()
+        c.drawRoundRect(RectF(0f, 0f, w.toFloat(), hh), hh / 2f, hh / 2f, p)
+
+        val gap = (w - hh * 0.5f) / 7f
+        val cy = hh / 2f
         week.forEachIndexed { i, state ->
-            val cx = gap * i + gap / 2f
+            val cx = hh * 0.25f + gap * i + gap / 2f
             // 0 DONE, 1 FROZEN, 2 TODAY, 3 MISSED, 4 FUTURE
             when (state) {
-                0 -> { p.color = 0xFFFFFFFF.toInt(); c.drawCircle(cx, cy, h * 0.30f, p) }
+                0 -> { p.color = 0xFFFFFFFF.toInt(); c.drawCircle(cx, cy, hh * 0.33f, p) }
                 1 -> {
-                    p.style = Paint.Style.STROKE; p.strokeWidth = h * 0.11f
-                    p.color = 0xCCFFFFFF.toInt(); c.drawCircle(cx, cy, h * 0.27f, p)
+                    p.style = Paint.Style.STROKE; p.strokeWidth = hh * 0.14f
+                    p.color = 0xFFFFFFFF.toInt(); c.drawCircle(cx, cy, hh * 0.27f, p)
                     p.style = Paint.Style.FILL
                 }
                 2 -> {
-                    p.color = 0x40FFFFFF; c.drawCircle(cx, cy, h * 0.48f, p)
-                    p.color = 0xFFFFFFFF.toInt(); c.drawCircle(cx, cy, h * 0.30f, p)
+                    // Aujourd'hui : un anneau clair autour du point, pour qu'il se repère
+                    // sans avoir à comparer des diamètres entre eux.
+                    p.style = Paint.Style.STROKE; p.strokeWidth = hh * 0.10f
+                    p.color = 0xFFFFD34E.toInt(); c.drawCircle(cx, cy, hh * 0.40f, p)
+                    p.style = Paint.Style.FILL
+                    p.color = 0xFFFFFFFF.toInt(); c.drawCircle(cx, cy, hh * 0.26f, p)
                 }
-                3 -> { p.color = 0x4DFFFFFF; c.drawCircle(cx, cy, h * 0.22f, p) }
-                else -> { p.color = 0x2EFFFFFF; c.drawCircle(cx, cy, h * 0.18f, p) }
+                3 -> { p.color = 0x99FFFFFF.toInt(); c.drawCircle(cx, cy, hh * 0.20f, p) }
+                else -> { p.color = 0x59FFFFFF; c.drawCircle(cx, cy, hh * 0.16f, p) }
             }
         }
         return bmp

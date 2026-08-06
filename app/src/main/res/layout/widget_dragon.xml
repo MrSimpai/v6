@@ -42,7 +42,7 @@
             <ImageView
                 android:id="@+id/widget_streak"
                 android:layout_width="wrap_content"
-                android:layout_height="19dp"
+                android:layout_height="25dp"
                 android:adjustViewBounds="true"
                 android:scaleType="fitStart"
                 android:contentDescription="@null" />
@@ -50,7 +50,7 @@
             <ImageView
                 android:id="@+id/widget_week"
                 android:layout_width="0dp"
-                android:layout_height="9dp"
+                android:layout_height="16dp"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp"
                 android:scaleType="fitEnd"

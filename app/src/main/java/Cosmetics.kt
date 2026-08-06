@@ -1,5 +1,7 @@
 package com.example.medtap.ui
 
+import com.example.medtap.Her
+
 /**
  * Le catalogue des cosmétiques.
  *
@@ -148,8 +150,11 @@ object Cosmetics {
             "Le classique. Deux oreilles rondes, un museau clair, aucune ambition."),
         Cosmetic("chat", "Le chat en peluche", Slot.FRIEND,
             "Gris, la queue enroulée, l'air de juger tout le monde. Framboise l'adore."),
-        Cosmetic("grenouille", "La grenouille en peluche", Slot.FRIEND,
-            "Les yeux sur le dessus de la tête et un sourire beaucoup trop large."),
+        // Elle a un nom, elle. C'est la seule pièce du catalogue qui en ait un, et c'est
+        // ce qui la sort du rang des accessoires.
+        Cosmetic("grenouille", "Bernadette", Slot.FRIEND,
+            "La grenouille. Yeux sur le dessus du crâne, sourire beaucoup trop large, " +
+                "aucune opinion. ${Her.dragon} lui raconte tout."),
         Cosmetic("herisson", "Le hérisson en peluche", Slot.FRIEND,
             "Piquant sur le dessus, doux sur le ventre. Il faut le prendre par en dessous."),
         Cosmetic("baleine", "La baleine en peluche", Slot.FRIEND,

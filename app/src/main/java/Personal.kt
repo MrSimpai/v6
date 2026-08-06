@@ -1,7 +1,6 @@
 package com.example.medtap
 
 import java.util.Calendar
-import kotlin.math.abs
 
 /**
  * Tout ce qui appartient à Flo est ici, et nulle part ailleurs.
@@ -22,10 +21,10 @@ object Her {
     /** Le dragon. Framboise, pour la couleur. */
     const val dragon = "Framboise"
 
-    /** Petits noms, pour les rappels légers. Jamais dans le palier sérieux. */
-    private val petNames = listOf("Flo", "Floflo", "Flomingo", "Flozilla", "Floflosky")
-
-    fun petName(seed: Long): String = petNames[abs(seed % petNames.size).toInt()]
+    // Il y avait ici un tirage de petits noms — Floflo, Flomingo, Flozilla, Floflosky —
+    // que plus personne n'appelait. Les surnoms n'ont pas disparu pour autant : ils sont
+    // écrits à la main dans les lignes de `FloMessages`, au cas par cas, ce qui les place
+    // toujours mieux qu'un tirage au sort ne le ferait.
 
     /** « Bonjour, Flo », « Bonsoir, Flo »… selon l'heure qu'il est chez elle. */
     fun greeting(now: Long = System.currentTimeMillis()): String {

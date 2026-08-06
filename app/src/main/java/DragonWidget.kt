@@ -47,9 +47,13 @@ class DragonWidget : AppWidgetProvider() {
          */
         private const val BG_PX = 320
         private const val DRAGON_PX = 168
-        private const val PILL_PX = 56
-        private const val WEEK_W = 168
-        private const val WEEK_H = 24
+        // La pastille et la semaine sont dessinées à bien plus que leur taille d'écran :
+        // ce sont les deux seuls chiffres de la tuile, et une gélule de 24 dp rendue à
+        // 56 px se lit floue sur un écran à 3x. Le budget bitmap reste largement sous le
+        // mégaoctet du Binder.
+        private const val PILL_PX = 96
+        private const val WEEK_W = 320
+        private const val WEEK_H = 48
 
         /** Redessine tous les widgets posés. Sans effet s'il n'y en a aucun. */
         fun refresh(ctx: Context) {
@@ -69,12 +73,12 @@ class DragonWidget : AppWidgetProvider() {
 
                 val owed = dao.outstandingToday(meds).filter { Slots.todayAt(it) <= now }
                 val lateMin = owed.maxOfOrNull { (now - Slots.todayAt(it)) / 60_000L } ?: 0L
-                val mood = when {
-                    owed.isEmpty() -> Mood.Sleeping
-                    lateMin >= 120 -> Mood.Overdue
-                    lateMin >= 60 -> Mood.Sad
-                    else -> Mood.Waiting
-                }
+                // Le visage suit exactement les paliers du rappel : c'est [Tier] qui
+                // décide, pas une deuxième liste de seuils. Sans ça la tuile et la
+                // notification finiraient par montrer deux têtes différentes à la même
+                // minute, ce qui est le genre d'écart qui fait douter de tout le reste.
+                val mood =
+                    if (owed.isEmpty()) Mood.Sleeping else Tier.forLateness(lateMin).mood
 
                 // La série telle qu'elle se lit maintenant, pas celle d'aujourd'hui :
                 // sinon le compteur tomberait à zéro chaque matin.

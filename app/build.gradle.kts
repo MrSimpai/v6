@@ -16,8 +16,14 @@ android {
         applicationId = "com.example.medtap"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+
+        // Le numéro de version vient du compteur de builds de CI, avec un repli à 1 pour
+        // les compilations locales. Il était figé à 1 : Android refuse d'installer par
+        // dessus une version dont le numéro a baissé, et surtout un APK qui prétend être
+        // le même que celui déjà installé n'a aucune raison d'être proposé comme mise à
+        // jour. Le nom des Releases suivait déjà le compteur ; l'APK, lui, mentait.
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
+        versionName = System.getenv("VERSION_NAME") ?: "1.0"
     }
 
     signingConfigs {

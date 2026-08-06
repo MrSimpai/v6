@@ -578,22 +578,6 @@ object Reminders {
         }
     }
 
-    /**
-     * Enregistrer une dose depuis un endroit qui n'est pas l'écran : le widget, un
-     * raccourci, plus tard peut-être une montre. Même chemin que le bouton de l'app —
-     * même créneau, même série, même arrêt des rappels — pour que les deux ne puissent
-     * pas raconter deux histoires différentes.
-     */
-    fun logFromOutside(ctx: Context, med: Medication) = CoroutineScope(Dispatchers.IO).launch {
-        val dao = Db.get(ctx).dao()
-        val slot = dao.slotToLog(med) ?: return@launch
-        dao.insert(DoseLog(tagId = med.tagId, scheduledFor = slot, takenAt = System.currentTimeMillis()))
-        resolve(ctx, med, slot)
-        val meds = dao.activeMedsOnce()
-        val complete = meds.all { dao.logForSlot(it.tagId, Slots.todayAt(it)) != null }
-        celebrate(ctx, med, slot, 0, if (complete) dao.perfectDayStreak(meds) else 0)
-    }
-
     fun rescheduleAll(ctx: Context) = CoroutineScope(Dispatchers.IO).launch {
         val dao = Db.get(ctx).dao()
         dao.activeMedsOnce().forEach { scheduleNext(ctx, it) }

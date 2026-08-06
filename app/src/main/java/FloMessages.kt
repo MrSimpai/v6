@@ -15,9 +15,13 @@ import kotlin.random.Random
  * travail que le texte lui-même.
  */
 enum class Tier(val mood: Mood) {
+    // Cinq paliers, cinq visages. Avant, les trois premiers partageaient la même tête :
+    // le texte escaladait et la figure restait identique, ce qui n'escalade qu'à moitié.
+    // L'arc est celui d'une vraie contrariété — on demande, on boude, on pleure, puis on
+    // arrête de jouer.
     PONCTUEL(Mood.Waiting),
-    RELANCE(Mood.Waiting),
-    BOUDERIE(Mood.Waiting),
+    RELANCE(Mood.Pleading),
+    BOUDERIE(Mood.Sulking),
     DRAME(Mood.Sad),
     SERIEUX(Mood.Overdue);
 
@@ -288,6 +292,10 @@ object FloMessages {
         Mood.Sad      -> "${Her.dragon} attend depuis un moment."
         Mood.Waiting  -> "Une dose t'attend."
         Mood.Sleeping -> "Rien de prévu. ${Her.dragon} fait la sieste."
+        Mood.Sulking  -> "${Her.dragon} boude. Une demi-heure, quand même."
+        Mood.Pleading -> "${Her.dragon} te regarde avec ses grands yeux."
+        Mood.Love     -> "${Her.dragon} t'aime aussi."
+        Mood.Proud    -> "${Her.dragon} est fière de toi."
     }
 
     /**
@@ -303,6 +311,10 @@ object FloMessages {
         Mood.Sad      -> "${Her.dragon} attend…"
         Mood.Waiting  -> "C'est l'heure 💊"
         Mood.Sleeping -> "Rien de prévu 😴"
+        Mood.Sulking  -> "Elle boude 😒"
+        Mood.Pleading -> "Elle te supplie 🥺"
+        Mood.Love     -> "Elle t'aime 💗"
+        Mood.Proud    -> "Elle est fière ✨"
     }
 
 

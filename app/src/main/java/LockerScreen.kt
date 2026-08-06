@@ -59,7 +59,11 @@ fun LockerScreen(
                 Modifier.fillMaxWidth().padding(vertical = 26.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Mascot(Mood.Cheering, Modifier.size(210.dp), worn = worn)
+                // Pendant l'essayage, elle répond au mot plutôt que de sourire poliment.
+                Mascot(
+                    if (previewing) Mood.Love else Mood.Cheering,
+                    Modifier.size(210.dp), worn = worn
+                )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     if (worn.isEmpty()) "Rien sur le dos pour l'instant"

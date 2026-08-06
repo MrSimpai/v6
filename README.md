@@ -140,8 +140,34 @@ All state lives in Room and AlarmManager, so a restart is otherwise harmless.
 `ui/Dragon.kt` draws her against a plain `android.graphics.Canvas`. Compose renders it via
 `drawIntoCanvas { it.nativeCanvas }`, the notification renders it to a `Bitmap`. The
 on-screen dragon and the notification dragon are the same code and can't drift apart.
-Five moods: `Sleeping`, `Waiting`, `Overdue`, `Cheering`, `Sad`. Zero image assets — she's
-all vectors, so she scales to any density and adds nothing to the APK.
+Nine moods, zero image assets — she's all vectors, so she scales to any density and adds
+nothing to the APK.
+
+**The five tiers now have five faces.** `Tier` used to map three of its five rungs onto the
+same expression, so the words escalated and the face didn't, which escalates by half. The
+arc is the one an actual sulk follows:
+
+| Tier | Face |
+|---|---|
+| `PONCTUEL` | `Waiting` — neutral, holding the pill |
+| `RELANCE` | `Pleading` — huge shining eyes, roof eyebrows |
+| `BOUDERIE` | `Sulking` — half-lidded, looking away, storm cloud overhead |
+| `DRAME` | `Sad` — crying |
+| `SERIEUX` | `Overdue` — angry, done joking |
+
+`Love` (heart eyes) and `Proud` (closed eyes, chin up, gold sparkles) sit outside the
+ladder: `Love` while the locker's fitting room is open, `Proud` when nothing is due and the
+streak is a week or better.
+
+### Tears, not weather
+
+The crying face used to scatter eight droplets between x=55 and x=165 — around the body,
+touching neither the eyes nor the cheeks. Floating in space like that, it read as a dragon
+caught in the rain rather than a dragon crying.
+
+What makes a tear is **contact**. It now runs from the lower lid down the cheek and stops
+at the jaw, with a single white highlight along it for wetness, and one detached droplet
+below — after the streak, never instead of it, or you're back to weather.
 
 ### The clock has to be state, or the dragon freezes
 
@@ -389,6 +415,26 @@ without the app waking up once, and reads as pressure. That's the Duolingo trick
 
 The 15-minute head-up gets the same treatment, counting down to the scheduled minute.
 
+## The first thirty seconds
+
+Three pages, shown once, skippable from the first: **who the dragon is**, **what's asked
+of you**, **what you get**. Then it's gone for good.
+
+Three and not seven, on purpose. A tutorial with an itinerary, on an app whose whole job is
+one pill a day, is the surest way never to be opened a second time. Each page has one
+picture, one line of title, and two sentences.
+
+Every page **shows** the thing rather than describing it — the real dragon, the real week
+dots, the real locker with Bernadette sitting beside her. It's the same code the app runs
+on, so an intro screen can't drift out of date the way a mocked-up screenshot would.
+
+Bernadette, the green frog, is the only piece in the catalogue with a name rather than a
+description. That's what lifts her out of the accessory list.
+
+The "seen it" flag lives in `SharedPreferences`, not in Room: it isn't data about her, it's
+a display detail, and restoring a backup should not make her sit through the introduction
+again.
+
 ## Cosmetics, chests and the locker
 
 One piece per **complete day**, never twice the same, permanent once earned. Fifty-five
@@ -628,6 +674,18 @@ flame greyed out. A badge that appears and disappears makes the tile jump from o
 to the next; and it is deliberately *not* a red numbered circle in the top corner, which
 is the universal sign of a pending chore rather than a reward.
 
+**Both counters carry their own contrast.** The pill went from 35% to 65% black, and the
+week dots gained a dark pill of their own behind them. That's the change that matters:
+seven small white circles drawn straight onto the scene vanished the moment the background
+went bright, and the faintest states — missed and still-to-come — disappeared outright.
+On a background guaranteed dark, all five states read on every one of the eight vibes.
+Today's dot is now a gold ring rather than merely a larger white circle, so it's found by
+colour instead of by comparing diameters.
+
+Both are also drawn at roughly triple their on-screen size (96px pill, 320×48 week) and
+scaled down, because a 24dp pill rasterised at 56px is visibly soft on a 3x screen. The
+whole `RemoteViews` payload is still about 660 KB, well inside the 1 MB Binder ceiling.
+
 ### The background escalates, and it knows what time it is
 
 `NotifArt.Vibe` is the colour ladder, shared by the widget and the notification banner:
@@ -664,10 +722,11 @@ already reached crimson. `Reminders.post` refreshes it on every nag -- the devic
 already awake at that point, so it costs nothing -- and `resolve` does too, so a dose
 logged by NFC with the app closed drops the tile back to calm at once.
 
-Earlier it also had a button that logged the dose without opening anything -- the
-shortest possible path between remembering and having recorded it. It goes through
-`Reminders.logFromOutside`, the same slot matching and streak counting as the in-app
-button, so the two can never tell different stories.
+Earlier it also had a button that logged the dose without opening anything. It was removed
+for the reason at the top of `DragonWidget`: logging from the home screen saves two seconds
+and skips the confirmation, the celebration and the chest, which are the whole reason to
+come back tomorrow. The machinery that backed it (`logFromOutside`) went with it in the
+release tidy-up rather than sitting there uncalled.
 
 ## Editing a medication
 

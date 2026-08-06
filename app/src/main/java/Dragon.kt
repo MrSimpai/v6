@@ -3,7 +3,29 @@ package com.example.medtap.ui
 import android.graphics.*
 import kotlin.math.sin
 
-enum class Mood { Sleeping, Waiting, Overdue, Cheering, Sad }
+/**
+ * Les visages du dragon.
+ *
+ * Les cinq premiers existaient depuis le début. Les quatre suivants ont été ajoutés parce
+ * que l'échelle de relance compte cinq paliers et n'avait que trois têtes : bouder, supplier
+ * et être vraiment fâchée se ressemblaient toutes. Une escalade qu'on lit dans le texte
+ * mais pas sur la figure escalade à moitié.
+ */
+enum class Mood {
+    Sleeping, Waiting, Overdue, Cheering, Sad,
+
+    /** Trente minutes. Elle regarde ailleurs, exprès, et attend qu'on le remarque. */
+    Sulking,
+
+    /** Une heure. Grands yeux mouillés, sourcils en toit : elle demande, elle n'exige pas. */
+    Pleading,
+
+    /** Le mot de passe du casier, et rien d'autre. Des cœurs à la place des yeux. */
+    Love,
+
+    /** Une série qui tient depuis longtemps. Yeux fermés, menton haut, très content de soi. */
+    Proud
+}
 
 /**
  * Le dragon de Flo, redessiné d'après le personnage de référence : framboise foncé,
@@ -127,9 +149,6 @@ object Dragon {
     const val HedgeQ   = 0xFF8A6E4E.toInt()
     const val Whale    = 0xFF7FB2DB.toInt()
     const val WhaleD   = 0xFF4E86B5.toInt()
-
-    // Ancien nom conservé pour compatibilité avec le code qui l'utilisait.
-    const val Crest    = Blush
 
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
@@ -603,7 +622,31 @@ object Dragon {
      * vers x=164 : c'est le seul coin de l'espace de dessin qui soit réellement vide,
      * quelles que soient les autres pièces portées.
      */
+    /**
+     * La taille du compagnon.
+     *
+     * Les peluches sont dessinées à leur taille d'origine — une quarantaine d'unités sur
+     * les 220 de l'espace de dessin — puis agrandies d'un bloc. Un seul nombre à changer
+     * plutôt que quarante coordonnées dans huit fonctions, et toutes gardent exactement
+     * les mêmes proportions entre elles.
+     */
+    private const val FRIEND_SCALE = 3f
+
+    /**
+     * Le point fixe de l'agrandissement : son appui au sol, à droite.
+     *
+     * Elle grandit donc vers le haut et vers la gauche depuis ce point, et reste posée sur
+     * la même ligne de sol que le dragon. À 3x elle passe devant lui — c'est voulu, une
+     * peluche s'appuie contre quelqu'un — mais elle atteint aussi le bas de sa tête. Si un
+     * jour le visage doit rester entièrement dégagé, la limite est autour de 1,9.
+     */
+    private const val FRIEND_PIVOT_X = 204f
+    private const val FRIEND_PIVOT_Y = 206f
+
     private fun friend(c: Canvas, wear: String?) {
+        if (wear == null) return
+        c.save()
+        c.scale(FRIEND_SCALE, FRIEND_SCALE, FRIEND_PIVOT_X, FRIEND_PIVOT_Y)
         when (wear) {
             "peluche" -> peluche(c)
             "doudou" -> doudou(c)
@@ -614,6 +657,7 @@ object Dragon {
             "herisson" -> herisson(c)
             "baleine" -> baleine(c)
         }
+        c.restore()
     }
 
     /**
@@ -1430,6 +1474,45 @@ object Dragon {
                     moveTo(it.x - 11f, it.y - 2f); quadTo(it.x, it.y + 7f, it.x + 11f, it.y - 2f)
                 }.also { path -> c.drawPath(path, stroke(Ink, 3.2f)) }
             }
+
+            // Paupières à mi-hauteur et pupilles poussées d'un même côté : c'est le regard
+            // de travers qui boude, pas les yeux fermés qui dorment.
+            Mood.Sulking -> listOf(l, r).forEach {
+                c.drawCircle(it.x, it.y, 11.5f, fill(White))
+                c.drawCircle(it.x - 4f, it.y + 2f, 6f, fill(Ink))
+                Path().apply {
+                    moveTo(it.x - 12f, it.y - 1f); quadTo(it.x, it.y - 9f, it.x + 12f, it.y - 1f)
+                    lineTo(it.x + 12f, it.y - 12f); lineTo(it.x - 12f, it.y - 12f); close()
+                }.also { path -> c.drawPath(path, fill(Pink)) }
+                c.drawLine(it.x - 12f, it.y - 2f, it.x + 12f, it.y - 2f, stroke(Ink, 2.6f))
+            }
+
+            // Très grands, très brillants, avec le sourcil en toit. Les deux reflets sont
+            // ce qui fait toute la différence entre supplier et fixer.
+            Mood.Pleading -> listOf(l to 1f, r to -1f).forEach { (e, d) ->
+                c.drawCircle(e.x, e.y + 1f, 14f, fill(White))
+                c.drawCircle(e.x, e.y + 3f, 9.5f, fill(Ink))
+                c.drawCircle(e.x + d * 4f, e.y - 2f, 4.2f, fill(White))
+                c.drawCircle(e.x - d * 4f, e.y + 7f, 2.4f, fill(White))
+                Path().apply {
+                    moveTo(e.x - d * 13f, e.y - 14f); quadTo(e.x, e.y - 20f, e.x + d * 12f, e.y - 12f)
+                }.also { path -> c.drawPath(path, stroke(PinkDeep, 3f)) }
+            }
+
+            Mood.Love -> listOf(l, r).forEach {
+                heart(c, it.x, it.y + 1f, 11f, 0xFFE84E7A.toInt())
+                heart(c, it.x - 3f, it.y - 2f, 3.5f, White)
+            }
+
+            // Yeux fermés en arc INVERSE de la joie : la satisfaction regarde vers le bas,
+            // le rire vers le haut. Même trait, sens contraire, tout le sens change.
+            Mood.Proud -> listOf(l, r).forEach {
+                Path().apply {
+                    moveTo(it.x - 11f, it.y - 4f); quadTo(it.x, it.y + 6f, it.x + 11f, it.y - 4f)
+                }.also { path -> c.drawPath(path, stroke(Ink, 3.4f)) }
+                c.drawCircle(it.x, it.y + 13f, 5f, fill(Blush).apply { alpha = 150 })
+                p.alpha = 255
+            }
         }
     }
 
@@ -1462,23 +1545,71 @@ object Dragon {
             }.also { c.drawPath(it, stroke(Ink, 3.4f)) }
 
             Mood.Sleeping -> c.drawLine(102f, 106f, 118f, 106f, stroke(Ink, 3f))
+
+            // Une bouche minuscule, poussée d'un côté. Boudeuse, pas triste : le trait est
+            // court et décentré au lieu d'être long et tombant.
+            Mood.Sulking -> Path().apply {
+                moveTo(100f, 108f); quadTo(106f, 104f, 112f, 107f)
+            }.also { c.drawPath(it, stroke(Ink, 3.2f)) }
+
+            // La bouche ondulée, celle qui essaie de ne pas pleurer.
+            Mood.Pleading -> Path().apply {
+                moveTo(99f, 108f)
+                quadTo(104f, 103f, 110f, 108f)
+                quadTo(116f, 113f, 121f, 107f)
+            }.also { c.drawPath(it, stroke(Ink, 3.2f)) }
+
+            Mood.Love -> {
+                Path().apply {
+                    moveTo(97f, 103f); quadTo(110f, 117f, 123f, 103f)
+                    quadTo(110f, 109f, 97f, 103f); close()
+                }.also { c.drawPath(it, fill(Ink)) }
+            }
+
+            // Un petit sourire fermé, tiré vers le haut d'un seul côté.
+            Mood.Proud -> Path().apply {
+                moveTo(99f, 104f); quadTo(110f, 111f, 122f, 101f)
+            }.also { c.drawPath(it, stroke(Ink, 3.4f)) }
         }
     }
 
+    /**
+     * Des larmes, pas de la pluie.
+     *
+     * La version précédente semait huit gouttes autour du corps, entre x=55 et x=165 :
+     * elles ne touchaient ni les yeux ni les joues, flottaient dans le vide, et le dessin
+     * se lisait comme un dragon sous l'averse plutôt que comme un dragon qui pleure.
+     *
+     * Ce qui fait une larme, c'est le CONTACT : une coulée qui part de la paupière basse,
+     * suit la joue et s'arrête au bord du menton. La goutte détachée n'arrive qu'après, et
+     * seulement sous la coulée, sinon on retombe dans l'averse.
+     */
     private fun tears(c: Canvas) {
-        listOf(
-            Triple(68f, 88f, 5f), Triple(55f, 97f, 4.2f),
-            Triple(152f, 88f, 5f), Triple(165f, 97f, 4.2f),
-            Triple(84f, 128f, 4.6f), Triple(136f, 128f, 4.6f),
-            Triple(64f, 150f, 4f), Triple(156f, 150f, 4f)
-        ).forEach { (x, y, r) ->
+        listOf(92f, 128f).forEach { ex ->
+            // la coulée, collée à la joue : large sous l'œil, effilée vers le bas
             Path().apply {
-                moveTo(x, y - r * 1.7f)
-                cubicTo(x + r, y - r * 0.2f, x + r, y + r, x, y + r)
-                cubicTo(x - r, y + r, x - r, y - r * 0.2f, x, y - r * 1.7f)
+                moveTo(ex - 5f, 86f)
+                cubicTo(ex - 8f, 96f, ex - 6f, 106f, ex - 2f, 111f)
+                cubicTo(ex + 3f, 106f, ex + 5f, 96f, ex + 4f, 86f)
                 close()
             }.also { c.drawPath(it, fill(Tear)) }
+
+            // le reflet, une seule ligne fine : c'est lui qui donne le mouillé
+            Path().apply { moveTo(ex - 2f, 90f); quadTo(ex - 4f, 99f, ex - 2f, 106f) }
+                .also { c.drawPath(it, stroke(White, 1.6f)) }
+
+            drop(c, ex - 2f, 122f, 4.6f)     // celle qui vient de se détacher
         }
+    }
+
+    /** Une goutte : pointe en haut, ventre en bas. */
+    private fun drop(c: Canvas, cx: Float, cy: Float, r: Float) {
+        Path().apply {
+            moveTo(cx, cy - r * 1.7f)
+            cubicTo(cx + r, cy - r * 0.2f, cx + r, cy + r, cx, cy + r)
+            cubicTo(cx - r, cy + r, cx - r, cy - r * 0.2f, cx, cy - r * 1.7f)
+            close()
+        }.also { c.drawPath(it, fill(Tear)) }
     }
 
     // ---- décor par humeur -------------------------------------------------
@@ -1502,6 +1633,26 @@ object Dragon {
                     c.drawLine(x + r, y, x, y + r, z)
                     c.drawLine(x, y + r, x + r, y + r, z)
                 }
+
+            // Le petit nuage d'orage au-dessus de la tête, celui des bandes dessinées.
+            Mood.Sulking -> {
+                c.drawRoundRect(RectF(150f, 22f, 206f, 42f), 10f, 10f, fill(Shade))
+                c.drawCircle(166f, 26f, 11f, fill(Shade))
+                c.drawCircle(190f, 26f, 9f, fill(Shade))
+                val bolt = stroke(PinkDeep, 3f)
+                c.drawLine(176f, 44f, 170f, 54f, bolt)
+                c.drawLine(170f, 54f, 178f, 52f, bolt)
+                c.drawLine(178f, 52f, 172f, 62f, bolt)
+            }
+
+            Mood.Love -> listOf(
+                Triple(30f, 52f, 9f), Triple(192f, 40f, 11f), Triple(200f, 128f, 7f)
+            ).forEach { (x, y, r) -> heart(c, x, y, r, 0xFFE84E7A.toInt()) }
+
+            Mood.Proud -> listOf(
+                Triple(26f, 46f, 10f), Triple(196f, 38f, 11f), Triple(204f, 130f, 8f)
+            ).forEach { (x, y, r) -> sparkle(c, x, y, r, Gold) }
+
             else -> Unit
         }
     }

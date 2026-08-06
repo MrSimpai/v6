@@ -23,6 +23,7 @@ import com.example.medtap.data.DoseLog
 import com.example.medtap.data.Medication
 import com.example.medtap.data.Slots
 import com.example.medtap.reminder.FloMessages
+import com.example.medtap.reminder.Tier
 import com.example.medtap.data.isManual
 import java.text.SimpleDateFormat
 import java.util.*
@@ -60,6 +61,8 @@ data class HomeState(
     val previewWorn: Set<String> = emptySet(),
     /** Créneaux passés cette semaine sans rappel posé ni dose notée : une panne, pas un risque. */
     val silentMisses: Int = 0,
+    /** La série telle que la lit le widget. Ici, elle sert à décider quand elle a le droit d'être fière. */
+    val streak: Int = 0,
     val pairing: Boolean = false,
     val hasNfc: Boolean = true,
     val nfcOff: Boolean = false
@@ -133,10 +136,13 @@ fun HomeScreen(
     // How late is the most overdue thing? That drives the dragon's face.
     val worstLateMin = owed.maxOfOrNull { (now - Slots.todayAt(it, now)) / 60_000L } ?: 0L
     val mood = when {
+        // Le mot du casier : elle le porte partout, pas seulement sur la page où il a
+        // été dit. C'est ce qui en fait une réponse plutôt qu'un déverrouillage.
+        state.previewUntil != null -> Mood.Love
         state.justLogged != null -> Mood.Cheering
-        worstLateMin >= 120 -> Mood.Overdue
-        worstLateMin >= 60 -> Mood.Sad
-        owed.isNotEmpty() -> Mood.Waiting
+        owed.isEmpty() && state.streak >= 7 -> Mood.Proud
+        // Les mêmes paliers que le rappel, décidés au même endroit.
+        owed.isNotEmpty() -> Tier.forLateness(worstLateMin).mood
         else -> Mood.Sleeping
     }
 

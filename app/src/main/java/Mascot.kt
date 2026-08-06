@@ -35,7 +35,10 @@ fun Mascot(
     )
 
     Canvas(modifier) {
-        if (mood == Mood.Waiting || mood == Mood.Overdue) {
+        // Les ondes disent « il y a quelque chose à faire », donc elles accompagnent tous
+        // les visages d'une dose en attente — pas seulement les deux extrêmes de l'échelle,
+        // sinon le milieu du retard serait le seul moment silencieux.
+        if (mood in setOf(Mood.Waiting, Mood.Pleading, Mood.Sulking, Mood.Sad, Mood.Overdue)) {
             tapRings(ring, if (mood == Mood.Overdue) Color(0xFFA21E50) else Color(0xFFC03765))
         }
         drawIntoCanvas { canvas ->
