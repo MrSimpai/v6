@@ -71,6 +71,16 @@
         </activity-alias>
 
         <activity-alias
+            android:name=".Late" android:targetActivity=".MainActivity"
+            android:icon="@drawable/ic_launcher_late" android:roundIcon="@drawable/ic_launcher_late"
+            android:label="@string/app_name" android:enabled="false" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
             android:name=".Overdue" android:targetActivity=".MainActivity"
             android:icon="@drawable/ic_launcher_overdue" android:roundIcon="@drawable/ic_launcher_overdue"
             android:label="@string/app_name" android:enabled="false" android:exported="true">

@@ -244,21 +244,37 @@ object FloMessages {
     }
 
     /**
-     * Le dernier appel du soir, avec le compte à rebours vers minuit. Écrit pour être lu
-     * en diagonale : ce qui reste à prendre, et ce qu'on perd si on ne le fait pas.
+     * Le bilan du dimanche soir : le seul message qui ne réclame rien.
+     *
+     * Le ton suit ce qui s'est réellement passé, mais aucune des versions ne fait la
+     * morale — c'est le dimanche soir, la semaine est finie, il n'y a plus rien à
+     * rattraper. Reprocher quoi que ce soit à ce moment-là n'obtiendrait rien du tout.
      */
-    fun lastCall(dayStreak: Int, remaining: List<String>): FloLine {
-        val what = remaining.joinToString(", ")
-        return if (dayStreak > 0)
-            FloLine(
-                "$dayStreak jours en jeu 🐉",
-                "$what — jusqu'à minuit. ${Her.dragon} croise les griffes."
+    fun weeklyRecap(daysDone: Int, streak: Int): FloLine {
+        val tail = when {
+            streak >= 30 -> " Série : $streak jours. C'est énorme, ${Her.name}."
+            streak >= 7  -> " Série : $streak jours."
+            streak > 0   -> " Série : $streak."
+            else -> ""
+        }
+        return when (daysDone) {
+            7 -> FloLine(
+                "Semaine parfaite 🐉✨",
+                "Sept jours sur sept. ${Her.dragon} n'a rien eu à réclamer.$tail"
             )
-        else
-            FloLine(
-                "Pas encore fini 🐉",
-                "$what — il te reste jusqu'à minuit, ${Her.name}."
+            6 -> FloLine("$daysDone jours sur 7 🎉", "Presque parfait. Belle semaine, ${Her.name}.$tail")
+            5 -> FloLine("$daysDone jours sur 7 👏", "Solide. La semaine est bonne.$tail")
+            4 -> FloLine("$daysDone jours sur 7", "Plus de la moitié. Ça compte.$tail")
+            3 -> FloLine("$daysDone jours sur 7", "On repart de là dimanche prochain.$tail")
+            in 1..2 -> FloLine(
+                "$daysDone jour${if (daysDone > 1) "s" else ""} cette semaine",
+                "C'est déjà ça, et une semaine ne dit rien de la suivante."
             )
+            else -> FloLine(
+                "Nouvelle semaine 🐉",
+                "Celle qui vient est encore entière. ${Her.dragon} t'attend."
+            )
+        }
     }
 
     /**

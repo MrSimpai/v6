@@ -15,9 +15,15 @@ import com.example.medtap.R
 import com.example.medtap.data.Db
 import com.example.medtap.data.DoseLog
 import com.example.medtap.data.Medication
+import com.example.medtap.data.DayState
+import com.example.medtap.data.ReminderPost
 import com.example.medtap.data.Slots
+import com.example.medtap.data.currentStreak
+import com.example.medtap.data.logForSlot
 import com.example.medtap.data.outstandingToday
 import com.example.medtap.data.perfectDayStreak
+import com.example.medtap.data.slotToLog
+import com.example.medtap.data.weekStatus
 import com.example.medtap.ui.Dragon
 import com.example.medtap.ui.Mood
 import kotlinx.coroutines.CoroutineScope
@@ -35,28 +41,75 @@ object Reminders {
 
     const val CHANNEL_NAG = "dose_due"
     const val CHANNEL_YAY = "dose_logged"
-    const val CHANNEL_RISK = "streak_risk"
     const val CHANNEL_SOON = "dose_soon"
+    const val CHANNEL_RECAP = "week_recap"
     const val ACTION_DUE = "com.example.medtap.DUE"
     const val ACTION_NAG = "com.example.medtap.NAG"
     const val ACTION_REPOST = "com.example.medtap.REPOST"
     const val ACTION_ICON = "com.example.medtap.ICON"
-    const val ACTION_LASTCALL = "com.example.medtap.LASTCALL"
     const val ACTION_SOON = "com.example.medtap.SOON"
+    const val ACTION_RECAP = "com.example.medtap.RECAP"
+
+    /** Un identifiant fixe : il n'y a qu'un bilan, et celui de dimanche prochain remplace celui-ci. */
+    private const val RECAP_ID = 0x0BE11E
 
     /** Combien de minutes avant l'heure prévue le premier mot arrive. */
     const val HEADSUP_MINUTES = 15
     const val EXTRA_TAG_ID = "tagId"
     const val EXTRA_SLOT = "slot"
-    const val EXTRA_MOOD = "mood"
+    const val EXTRA_VIBE = "vibe"
 
+    /**
+     * Un seul identifiant par médicament, pour toute la journée.
+     *
+     * Le mot d'avance, le rappel et chacune de ses relances se posent tous là-dessus, donc
+     * ils se REMPLACENT au lieu de s'empiler. Avant, l'avance avait son propre
+     * identifiant : à l'heure pile on se retrouvait avec « c'est bientôt l'heure » et
+     * « c'est l'heure » l'un sous l'autre, deux fois la même nouvelle. Une notification
+     * par médicament, qui change de ton au fil de la journée, se lit comme quelqu'un qui
+     * parle ; deux, comme un logiciel qui insiste.
+     */
     private fun notifId(tagId: String) = tagId.hashCode() and 0x0FFFFFFF
 
-    /** Fixed id: there is only ever one countdown, for the day as a whole. */
-    private const val LASTCALL_ID = 0x0FF1CE
+    /**
+     * Le haut de l'échelle, en millisecondes : au-delà, [Tier.SERIEUX], et il n'y a plus
+     * de palier au-dessus. C'est la borne du compte à rebours affiché sur le rappel.
+     */
+    private const val ESCALATION_MS = 120 * 60_000L
 
-    /** The hour the evening countdown appears. Three hours of runway before midnight. */
-    private const val LASTCALL_HOUR = 21
+    /**
+     * Les heures où une relance ne fait plus de bruit. 22h à 8h.
+     *
+     * Ça ne touche QUE les relances : la première sonnerie, celle de l'heure prévue,
+     * passe toujours. Une pilule de 22h30 doit réveiller quelqu'un ; la douzième relance
+     * de la même pilule à 3h du matin ne réveille personne utilement, elle apprend juste
+     * à couper les notifications de l'app — ce qui met fin à tout.
+     */
+    private const val QUIET_FROM_HOUR = 22
+    private const val QUIET_TO_HOUR = 8
+
+    private fun quietHours(now: Long): Boolean {
+        val hour = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.HOUR_OF_DAY)
+        return hour >= QUIET_FROM_HOUR || hour < QUIET_TO_HOUR
+    }
+
+    /**
+     * Le droit de faire du bruit, décidé par ce qui a déclenché la pose.
+     *
+     * L'ancienne version était un booléen `alertAgain`, vrai pour l'heure prévue comme
+     * pour toutes les relances : un rappel manqué à 21h sonnait donc au volume d'une
+     * alarme toutes les dix minutes jusqu'à minuit, en traversant le mode Ne pas déranger.
+     */
+    enum class Alert {
+        /** L'heure vient de sonner. Ça sonne, quelle que soit l'heure qu'il est. */
+        DUE,
+
+        /** Une relance. Elle se tait la nuit, et se tait passé le dernier palier. */
+        NAG,
+
+        /** Une remise en place après un balayage. Jamais de bruit : rien de neuf n'est arrivé. */
+        SILENT
+    }
 
     // ---- channels ---------------------------------------------------------
 
@@ -82,7 +135,11 @@ object Reminders {
                     }
             )
         }
-        lastCallChannel(nm)
+        // Le canal du compte à rebours du soir a disparu avec lui. On le supprime plutôt
+        // que de l'oublier : sinon il resterait pour toujours dans les réglages du
+        // téléphone, listé sous un nom qui ne correspond plus à rien.
+        runCatching { nm.deleteNotificationChannel("streak_risk") }
+
         if (nm.getNotificationChannel(CHANNEL_SOON) == null) {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL_SOON, "Bientôt l'heure", NotificationManager.IMPORTANCE_DEFAULT)
@@ -98,18 +155,18 @@ object Reminders {
                     .apply { description = "Celle qui félicite." ; enableVibration(true) }
             )
         }
-    }
-
-    // ---- scheduling -------------------------------------------------------
-
-    private fun lastCallChannel(nm: NotificationManager) {
-        if (nm.getNotificationChannel(CHANNEL_RISK) == null) {
+        if (nm.getNotificationChannel(CHANNEL_RECAP) == null) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_RISK, "Série en jeu", NotificationManager.IMPORTANCE_DEFAULT)
-                    .apply { description = "Le compte à rebours du soir, avant minuit." }
+                NotificationChannel(CHANNEL_RECAP, "Bilan du dimanche", NotificationManager.IMPORTANCE_LOW)
+                    .apply {
+                        description = "Une fois par semaine, ce qui s'est bien passé."
+                        enableVibration(false)
+                    }
             )
         }
     }
+
+    // ---- scheduling -------------------------------------------------------
 
     private fun alarmPI(ctx: Context, action: String, med: Medication, slot: Long): PendingIntent {
         val intent = Intent(ctx, ReminderReceiver::class.java).apply {
@@ -143,12 +200,15 @@ object Reminders {
     }
 
     /**
-     * Le rappel anticipé : arrivé avant l'heure, il n'a rien à reprocher.
+     * Le mot d'avance, un quart d'heure avant l'heure prévue.
      *
-     * Toute l'échelle existante réagit à un retard, ce qui veut dire que le premier mot
-     * de la journée est toujours un constat d'échec. Celui-ci change ça — il prévient
-     * pendant qu'il est encore possible d'être à l'heure, et disparaît tout seul dès que
-     * l'heure est passée.
+     * Tout le reste de l'échelle réagit à un retard, ce qui veut dire que sans lui le
+     * premier mot de la journée est toujours un constat d'échec. Celui-ci prévient
+     * pendant qu'il est encore possible d'être à l'heure : canal silencieux, aucune
+     * vibration, aucun reproche — un coup de coude, pas une alarme.
+     *
+     * Il se pose sur [notifId], donc à l'heure pile le vrai rappel prend sa place au lieu
+     * de s'ajouter en dessous : une seule ligne dans le tiroir, qui change de ton.
      */
     fun soon(ctx: Context, med: Medication, slot: Long) = postSoon(ctx, med, slot)
 
@@ -157,43 +217,145 @@ object Reminders {
             ensureChannels(ctx)
             val dao = Db.get(ctx).dao()
             if (dao.logForSlot(med.tagId, slot) != null) return@launch      // déjà prise en avance
+            if (System.currentTimeMillis() >= slot) return@launch           // l'heure est passée
 
             val line = FloMessages.early(slot)
+            val body = "${med.name} — ${line.body}"
             val open = PendingIntent.getActivity(
-                ctx, notifId(med.tagId) + 2,
+                ctx, notifId(med.tagId),
                 Intent(ctx, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+            val vibe =
+                if (NotifArt.isNight()) NotifArt.Vibe.REST_NIGHT else NotifArt.Vibe.REST_DAY
             val n = NotificationCompat.Builder(ctx, CHANNEL_SOON)
                 .setSmallIcon(R.drawable.ic_stat_dragon)
                 .setLargeIcon(Dragon.faceBitmap(256, Mood.Sleeping))
                 .setContentTitle(line.title)
-                .setContentText("${med.name} — ${line.body}")
+                .setContentText(body)
                 .setStyle(
                     NotificationCompat.BigPictureStyle()
-                        .bigPicture(NotifArt.banner(Mood.Sleeping, line.title, "${med.name} — ${line.body}"))
+                        // Rien n'est en retard : le décor est celui du repos, jour ou nuit
+                        // selon la pendule, pas selon l'humeur.
+                        .bigPicture(NotifArt.banner(Mood.Sleeping, vibe, line.title, body))
                         .bigLargeIcon(null as android.graphics.Bitmap?)
                         .setBigContentTitle(line.title)
                 )
                 .setColor(Dragon.Pink)
-                .setColorized(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setAutoCancel(true)
                 .setOnlyAlertOnce(true)
-                // Elle s'efface d'elle-même à l'heure prévue : passé ce point, c'est le
-                // vrai rappel qui prend le relais et deux notifications diraient la même
-                // chose avec deux tons différents.
-                .setTimeoutAfter((slot - System.currentTimeMillis()).coerceAtLeast(60_000L))
+                // Le quart d'heure fond à l'écran, tenu par le système. « Dans 15 minutes »
+                // écrit en toutes lettres serait faux dès la minute suivante.
+                .setShowWhen(true)
+                .setWhen(slot)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(true)
                 .setContentIntent(open)
                 .build()
             val nm = NotificationManagerCompat.from(ctx)
-            if (nm.areNotificationsEnabled()) nm.notify(notifId(med.tagId) + 2, n)
+            if (nm.areNotificationsEnabled()) nm.notify(notifId(med.tagId), n)
         }
 
-    private fun scheduleNag(ctx: Context, med: Medication, slot: Long) {
-        val at = System.currentTimeMillis() + med.nagEveryMinutes * 60_000L
+    /**
+     * Arme la prochaine relance.
+     *
+     * Passé le dernier palier, la prochaine n'est pas dans dix minutes mais juste après
+     * minuit — et il en faut UNE, on ne peut pas simplement arrêter. C'est cette alarme
+     * qui, une fois la journée tournée, retire le rappel périmé et arme celui du
+     * lendemain (voir la sortie anticipée d'[onAlarm]). Sans elle, une seule dose oubliée
+     * laissait un « tu es en retard » d'hier collé à l'écran et, pire, plus aucun rappel
+     * les jours suivants tant que l'app n'était pas rouverte.
+     *
+     * Entre les deux, on ne réveille plus le téléphone toutes les dix minutes pour
+     * reposer un message qui ne peut plus changer.
+     */
+    // ---- le bilan du dimanche ---------------------------------------------
+
+    /** Dimanche 19h. Ou celui de la semaine prochaine s'il est déjà passé. */
+    private const val RECAP_HOUR = 19
+
+    fun scheduleRecap(ctx: Context) {
+        val at = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, RECAP_HOUR)
+            set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            while (get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY ||
+                timeInMillis <= System.currentTimeMillis()
+            ) add(Calendar.DAY_OF_YEAR, 1)
+        }.timeInMillis
+
+        // Inexact et sans réveil : arriver à la minute près pour un bilan hebdomadaire
+        // n'a aucun intérêt, et ça ne justifie pas de sortir le téléphone de veille.
+        ctx.getSystemService(AlarmManager::class.java).set(
+            AlarmManager.RTC, at,
+            PendingIntent.getBroadcast(
+                ctx, ACTION_RECAP.hashCode(),
+                Intent(ctx, ReminderReceiver::class.java).setAction(ACTION_RECAP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        )
+    }
+
+    /**
+     * Le seul message de toute l'app qui ne demande rien.
+     *
+     * Tout le reste part d'un problème : c'est l'heure, c'est en retard, c'est très en
+     * retard. Une app qui ne parle que pour réclamer finit par n'être qu'une corvée, si
+     * bien écrite soit-elle. Celui-ci arrive le dimanche soir et ne fait que raconter la
+     * semaine.
+     *
+     * Il ne se pose QUE s'il ne reste rien à prendre. Féliciter quelqu'un pendant qu'un
+     * rappel est encore affiché, ce serait deux notifications pour la même journée, dont
+     * une qui se réjouit trop tôt — exactement ce qu'on a retiré ailleurs.
+     */
+    fun postRecap(ctx: Context) = CoroutineScope(Dispatchers.IO).launch {
+        ensureChannels(ctx)
+        scheduleRecap(ctx)                      // celui de dimanche prochain, tout de suite
+
+        val dao = Db.get(ctx).dao()
+        val meds = dao.activeMedsOnce()
+        if (meds.isEmpty()) return@launch
+        if (dao.outstandingToday(meds).isNotEmpty()) return@launch
+
+        val done = dao.weekStatus(meds).count { it == DayState.DONE }
+        val line = FloMessages.weeklyRecap(done, dao.currentStreak(meds))
+
+        val open = PendingIntent.getActivity(
+            ctx, RECAP_ID,
+            Intent(ctx, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val n = NotificationCompat.Builder(ctx, CHANNEL_RECAP)
+            .setSmallIcon(R.drawable.ic_stat_dragon)
+            .setLargeIcon(Dragon.faceBitmap(256, Mood.Cheering))
+            .setContentTitle(line.title)
+            .setContentText(line.body)
+            .setStyle(
+                NotificationCompat.BigPictureStyle()
+                    .bigPicture(
+                        NotifArt.banner(Mood.Cheering, NotifArt.Vibe.WIN, line.title, line.body)
+                    )
+                    .bigLargeIcon(null as android.graphics.Bitmap?)
+                    .setBigContentTitle(line.title)
+            )
+            .setColor(0xFF3FA98D.toInt())
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .build()
+
+        val nm = NotificationManagerCompat.from(ctx)
+        if (nm.areNotificationsEnabled()) nm.notify(RECAP_ID, n)
+    }
+
+    private fun scheduleNag(ctx: Context, med: Medication, slot: Long, tier: Tier) {
+        val now = System.currentTimeMillis()
+        val at =
+            if (tier == Tier.SERIEUX) Slots.dayAfter(Slots.dayOf(now)) + 60_000L
+            else now + med.nagEveryMinutes * 60_000L
         ctx.getSystemService(AlarmManager::class.java).setExactAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP, at, alarmPI(ctx, ACTION_NAG, med, slot)
         )
@@ -206,12 +368,12 @@ object Reminders {
      * disappearing under her thumb. Inexact and RTC, not RTC_WAKEUP: waking the device
      * to repaint an icon would be absurd.
      */
-    private fun scheduleIconUpdate(ctx: Context, mood: Mood, delayMs: Long) {
+    private fun scheduleIconUpdate(ctx: Context, vibe: NotifArt.Vibe, delayMs: Long) {
         val pi = PendingIntent.getBroadcast(
             ctx, ACTION_ICON.hashCode(),
             Intent(ctx, ReminderReceiver::class.java).apply {
                 action = ACTION_ICON
-                putExtra(EXTRA_MOOD, mood.name)
+                putExtra(EXTRA_VIBE, vibe.name)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -220,112 +382,28 @@ object Reminders {
     }
 
     /**
+     * Il y avait ici un compte à rebours du soir, posé à 21h, qui listait ce qui restait
+     * à prendre avant minuit.
+     *
+     * Il a été retiré parce qu'il ne pouvait apparaître QUE par-dessus un rappel déjà
+     * posé : il ne se déclenchait que s'il restait une dose due, et une dose due a
+     * toujours son propre rappel permanent. Ça faisait donc systématiquement deux
+     * notifications pour une seule pilule, l'une disant qu'il y en avait une à prendre et
+     * l'autre étant celle de la pilule. Le compte à rebours, lui, n'a pas disparu : il est
+     * passé sur le rappel lui-même, où il avait toujours eu sa place.
+     *
      * Tear everything down for a medication being removed. The PendingIntent request code
      * is keyed on tagId + action and ignores the slot, so one cancel per action clears any
      * pending alarm whatever slot it was armed for.
      */
-    /** Arms tonight's countdown, or tomorrow's if 21h has already gone by. */
-    fun scheduleLastCall(ctx: Context) {
-        val at = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, LASTCALL_HOUR)
-            set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-            if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
-        }.timeInMillis
-
-        val pi = PendingIntent.getBroadcast(
-            ctx, ACTION_LASTCALL.hashCode(),
-            Intent(ctx, ReminderReceiver::class.java).setAction(ACTION_LASTCALL),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val am = ctx.getSystemService(AlarmManager::class.java)
-        if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
-            am.set(AlarmManager.RTC_WAKEUP, at, pi)
-        } else {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
-        }
-    }
-
-    /** Midnight tonight: the moment the day, and the streak, turns over. */
-    private fun midnightTonight(): Long = Calendar.getInstance().apply {
-        add(Calendar.DAY_OF_YEAR, 1)
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-    /**
-     * The evening countdown, Duolingo's trick: a live ticking clock rather than a sentence
-     * about time. `setChronometerCountDown` hands the ticking to the system, so it stays
-     * accurate without the app waking up once, and it reads as pressure in a way that
-     * "il reste 2 heures" -- frozen at whatever it said when it was posted -- never does.
-     *
-     * Called both by the 21h alarm and after any dose is logged, so it appears, updates
-     * and disappears on its own. Also re-arms tomorrow's alarm.
-     */
-    fun refreshLastCall(ctx: Context) = CoroutineScope(Dispatchers.IO).launch {
-        ensureChannels(ctx)
-        scheduleLastCall(ctx)
-
-        val nm = NotificationManagerCompat.from(ctx)
-        val dao = Db.get(ctx).dao()
-        val meds = dao.activeMedsOnce()
-        val left = dao.outstandingToday(meds)
-        val now = System.currentTimeMillis()
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-
-        // Nothing owed, or too early in the evening for a last call.
-        if (left.isEmpty() || hour < LASTCALL_HOUR) {
-            nm.cancel(LASTCALL_ID)
-            return@launch
-        }
-
-        val midnight = midnightTonight()
-        val streak = dao.perfectDayStreak(meds)
-        val line = FloMessages.lastCall(streak, left.map { it.name })
-
-        val open = PendingIntent.getActivity(
-            ctx, LASTCALL_ID,
-            Intent(ctx, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val n = NotificationCompat.Builder(ctx, CHANNEL_RISK)
-            .setSmallIcon(R.drawable.ic_stat_dragon)
-            .setLargeIcon(Dragon.faceBitmap(256, Mood.Sad))
-            .setContentTitle(line.title)
-            .setContentText(line.body)
-            .setStyle(
-                NotificationCompat.BigPictureStyle()
-                    .bigPicture(NotifArt.banner(Mood.Sad, line.title, line.body))
-                    .bigLargeIcon(null as android.graphics.Bitmap?)
-                    .setBigContentTitle(line.title)
-            )
-            .setColor(Dragon.Pink)
-            .setColorized(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setShowWhen(true)
-            .setWhen(midnight)
-            .setUsesChronometer(true)
-            .setChronometerCountDown(true)       // le compte à rebours, tenu par le système
-            .setTimeoutAfter(midnight - now)     // s'efface pile quand il atteint zéro
-            .setOnlyAlertOnce(true)
-            .setAutoCancel(true)
-            .setContentIntent(open)
-            .build()
-
-        if (nm.areNotificationsEnabled()) nm.notify(LASTCALL_ID, n)
-    }
-
     fun cancelAll(ctx: Context, med: Medication) {
         val am = ctx.getSystemService(AlarmManager::class.java)
         val slot = Slots.todayAt(med)
         am.cancel(alarmPI(ctx, ACTION_DUE, med, slot))
         am.cancel(alarmPI(ctx, ACTION_NAG, med, slot))
         val nm = NotificationManagerCompat.from(ctx)
-        nm.cancel(notifId(med.tagId))
-        nm.cancel(notifId(med.tagId) + 1)
-        nm.cancel(notifId(med.tagId) + 2)
+        nm.cancel(notifId(med.tagId))           // l'avance ET le rappel : même identifiant
+        nm.cancel(notifId(med.tagId) + 1)       // la félicitation
         am.cancel(alarmPI(ctx, ACTION_SOON, med, slot))
     }
 
@@ -334,13 +412,26 @@ object Reminders {
 
     // ---- the sticky dragon ------------------------------------------------
 
-    fun post(ctx: Context, med: Medication, slot: Long, alertAgain: Boolean) {
+    /** Pose (ou remplace) le rappel, et rapporte le palier atteint à l'appelant. */
+    fun post(ctx: Context, med: Medication, slot: Long, alert: Alert): Tier {
         ensureChannels(ctx)
-        val lateMin = ((System.currentTimeMillis() - slot) / 60_000L).coerceAtLeast(0)
+        val now = System.currentTimeMillis()
+        val lateMin = ((now - slot) / 60_000L).coerceAtLeast(0)
         val (tier, line) = FloMessages.line(lateMin, slot, med.name)
         val mood = tier.mood
+        val vibe = NotifArt.vibeFor(tier)
 
-        IconSwitcher.apply(ctx, mood)
+        // Le bruit s'arrête avant le rappel. Passé le dernier palier il n'y a plus rien à
+        // annoncer — l'escalade est finie, le dragon a dit ce qu'il avait à dire — et la
+        // nuit, une relance sonore n'obtient rien qu'une app dont on coupe les
+        // notifications. La notification, elle, reste posée dans les deux cas.
+        val aloud = when (alert) {
+            Alert.DUE -> true
+            Alert.NAG -> tier != Tier.SERIEUX && !quietHours(now)
+            Alert.SILENT -> false
+        }
+
+        IconSwitcher.apply(ctx, vibe)
 
         val open = PendingIntent.getActivity(
             ctx, med.tagId.hashCode(),
@@ -361,7 +452,20 @@ object Reminders {
         )
 
         val face = Dragon.faceBitmap(256, mood)
-        val banner = NotifArt.banner(mood, line.title, line.body)
+        // Le décor monte le même escalier que le texte : c'est le palier qui décide des
+        // deux, donc la couleur et le ton ne peuvent pas escalader à des minutes
+        // différentes.
+        val banner = NotifArt.banner(mood, vibe, line.title, line.body)
+
+        // Le compte à rebours va jusqu'au HAUT DE L'ÉCHELLE, pas jusqu'à minuit.
+        //
+        // Minuit était une échéance que le rappel ne tenait pas : rien de particulier ne
+        // se produisait à zéro, et une horloge qui égrène six heures ne presse personne.
+        // Deux heures, c'est le moment où le dragon cesse de plaisanter — une échéance
+        // réelle, dont on voit la conséquence arriver. Une fois passée il n'y a plus rien
+        // à décompter, alors l'horloge disparaît plutôt que de compter à l'envers.
+        val deadline = slot + ESCALATION_MS
+        val counting = now < deadline
 
         val n = NotificationCompat.Builder(ctx, CHANNEL_NAG)
             .setSmallIcon(R.drawable.ic_stat_dragon)
@@ -383,13 +487,13 @@ object Reminders {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
-            .setOnlyAlertOnce(!alertAgain)
-            // Le compte à rebours vers minuit, tenu par le système, directement sur le
-            // rappel. Duolingo ne dit pas « il te reste du temps », il le montre fondre.
-            .setShowWhen(true)
-            .setWhen(midnightTonight())
-            .setUsesChronometer(true)
-            .setChronometerCountDown(true)
+            .setOnlyAlertOnce(!aloud)
+            // Tenu par le système : il reste juste sans que l'app se réveille une fois.
+            // Duolingo ne dit pas « il te reste du temps », il le montre fondre.
+            .setShowWhen(counting)
+            .setWhen(if (counting) deadline else now)
+            .setUsesChronometer(counting)
+            .setChronometerCountDown(counting)
             .setContentIntent(open)
             .setDeleteIntent(repost)
             .addAction(
@@ -401,7 +505,25 @@ object Reminders {
 
         if (NotificationManagerCompat.from(ctx).areNotificationsEnabled()) {
             NotificationManagerCompat.from(ctx).notify(notifId(med.tagId), n)
+            // La preuve qu'on a bel et bien prévenu. Écrite ici et nulle part ailleurs :
+            // c'est le seul endroit où la notification est réellement remise au système.
+            // Le jour où l'alarme ne part pas, cette ligne manque, et [silentMisses] le
+            // voit. Une relance réécrit la même ligne — un rappel par créneau, pas un
+            // par sonnerie.
+            val app = ctx.applicationContext
+            CoroutineScope(Dispatchers.IO).launch {
+                Db.get(app).dao().recordPost(
+                    ReminderPost(med.tagId, slot, System.currentTimeMillis())
+                )
+            }
         }
+
+        // La tuile monte le même escalier, et elle ne se redessine d'elle-même qu'une
+        // fois par demi-heure — le plancher qu'Android impose à `updatePeriodMillis`.
+        // Sans ça le fond restait bleu pendant que le rappel en était déjà au bordeaux.
+        // Ici on est déjà réveillé par la relance, donc ça ne coûte rien de plus.
+        DragonWidget.refresh(ctx)
+        return tier
     }
 
     /** Fires the instant a dose is logged -- scanned or ticked off: dragon celebrates, nagging stops. */
@@ -409,11 +531,13 @@ object Reminders {
     fun resolve(ctx: Context, med: Medication, slot: Long) {
         ensureChannels(ctx)
         NotificationManagerCompat.from(ctx).cancel(notifId(med.tagId))
-        NotificationManagerCompat.from(ctx).cancel(notifId(med.tagId) + 2)
         cancelNag(ctx, med, slot)
         scheduleNext(ctx, med)
-        scheduleIconUpdate(ctx, Mood.Sleeping, 60_000L)
-        refreshLastCall(ctx)      // may have been the last one owed -- clear the countdown
+        scheduleIconUpdate(ctx, NotifArt.Vibe.REST_DAY, 60_000L)
+        // Une dose notée hors de l'app (une étiquette scannée, téléphone rangé) ne passe
+        // par aucun observateur : sans ça la tuile resterait rouge jusqu'à la prochaine
+        // demi-heure alors que la dose est prise.
+        DragonWidget.refresh(ctx)
     }
 
     /**
@@ -440,7 +564,7 @@ object Reminders {
             .setContentText(line.body)
             .setStyle(
                 NotificationCompat.BigPictureStyle()
-                    .bigPicture(NotifArt.banner(Mood.Cheering, line.title, line.body))
+                    .bigPicture(NotifArt.banner(Mood.Cheering, NotifArt.Vibe.WIN, line.title, line.body))
                     .bigLargeIcon(null as android.graphics.Bitmap?)
                     .setBigContentTitle(line.title)
             )
@@ -462,9 +586,7 @@ object Reminders {
      */
     fun logFromOutside(ctx: Context, med: Medication) = CoroutineScope(Dispatchers.IO).launch {
         val dao = Db.get(ctx).dao()
-        if (!Slots.canLogNow(med)) return@launch
-        val slot = Slots.todayAt(med)
-        if (dao.logForSlot(med.tagId, slot) != null) return@launch
+        val slot = dao.slotToLog(med) ?: return@launch
         dao.insert(DoseLog(tagId = med.tagId, scheduledFor = slot, takenAt = System.currentTimeMillis()))
         resolve(ctx, med, slot)
         val meds = dao.activeMedsOnce()
@@ -473,8 +595,12 @@ object Reminders {
     }
 
     fun rescheduleAll(ctx: Context) = CoroutineScope(Dispatchers.IO).launch {
-        Db.get(ctx).dao().activeMedsOnce().forEach { scheduleNext(ctx, it) }
-        scheduleLastCall(ctx)
+        val dao = Db.get(ctx).dao()
+        dao.activeMedsOnce().forEach { scheduleNext(ctx, it) }
+        scheduleRecap(ctx)
+        // La trace des rappels ne sert qu'à regarder la semaine écoulée : au-delà d'un
+        // mois elle ne répond plus à aucune question et n'est plus qu'une table qui gonfle.
+        dao.prunePosts(Slots.dayStart(30))
     }
 
     internal fun onAlarm(ctx: Context, action: String, tagId: String, slot: Long, done: () -> Unit) {
@@ -491,9 +617,13 @@ object Reminders {
                 }
                 when (action) {
                     ACTION_DUE, ACTION_NAG -> {
-                        post(ctx, med, slot, alertAgain = true); scheduleNag(ctx, med, slot)
+                        val tier = post(
+                            ctx, med, slot,
+                            if (action == ACTION_DUE) Alert.DUE else Alert.NAG
+                        )
+                        scheduleNag(ctx, med, slot, tier)
                     }
-                    ACTION_REPOST -> post(ctx, med, slot, alertAgain = false)
+                    ACTION_REPOST -> post(ctx, med, slot, Alert.SILENT)
                 }
             } finally { done() }
         }
@@ -514,15 +644,16 @@ class ReminderReceiver : BroadcastReceiver() {
             return
         }
 
-        if (action == Reminders.ACTION_LASTCALL) {
-            Reminders.refreshLastCall(ctx.applicationContext)
+        if (action == Reminders.ACTION_RECAP) {
+            Reminders.postRecap(ctx.applicationContext)
             return
         }
 
         if (action == Reminders.ACTION_ICON) {
-            val mood = runCatching { Mood.valueOf(intent.getStringExtra(Reminders.EXTRA_MOOD)!!) }
-                .getOrNull() ?: return
-            IconSwitcher.apply(ctx.applicationContext, mood)
+            val vibe = runCatching {
+                NotifArt.Vibe.valueOf(intent.getStringExtra(Reminders.EXTRA_VIBE)!!)
+            }.getOrNull() ?: return
+            IconSwitcher.apply(ctx.applicationContext, vibe)
             return
         }
 

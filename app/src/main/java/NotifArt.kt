@@ -3,6 +3,7 @@ package com.example.medtap.reminder
 import android.graphics.*
 import com.example.medtap.ui.Dragon
 import com.example.medtap.ui.Mood
+import java.util.Calendar
 import kotlin.random.Random
 
 /**
@@ -18,9 +19,17 @@ import kotlin.random.Random
 object NotifArt {
 
     /**
-     * Une ambiance par humeur. Le widget et la bannière tirent du même endroit, sinon
-     * les deux surfaces racontent la même minute avec deux palettes différentes.
+     * L'échelle de couleurs du décor, dans l'ordre où on la monte.
+     *
+     * C'est le mécanisme de Duolingo : la tuile ne change pas seulement de texte quand
+     * ça traîne, elle change de température. Turquoise, bleu, indigo, magenta, rouge —
+     * on voit qu'on est en retard depuis l'autre bout de la pièce, sans avoir rien lu.
+     *
+     * Le repos a deux versions parce qu'une lune en plein après-midi est le genre de
+     * détail qui fait comprendre d'un coup que le dessin ne regarde pas l'heure.
      */
+    enum class Vibe { REST_DAY, REST_NIGHT, WIN, DUE, NUDGE, SULK, DRAMA, ANGRY }
+
     private class Skin(
         val sky: Int,
         val ground: Int,
@@ -28,17 +37,50 @@ object NotifArt {
         val glow: Int
     )
 
-    private fun skin(mood: Mood): Skin = when (mood) {
-        // Rien à prendre : nuit calme. C'est la seule ambiance qui n'appelle à rien.
-        Mood.Sleeping -> Skin(0xFF262A63.toInt(), 0xFF5B4E96.toInt(), 0xFFFFF3C4.toInt())
-        // L'heure vient d'arriver : lever de soleil, chaud, sans reproche.
-        Mood.Waiting  -> Skin(0xFFE8913F.toInt(), 0xFFE2564F.toInt(), 0xFFFFF0B8.toInt())
-        // Une heure de retard : le jour tombe.
-        Mood.Sad      -> Skin(0xFF6B3E9B.toInt(), 0xFFA92E6D.toInt(), 0xFFE7D3F5.toInt())
-        // Deux heures : braises. La seule ambiance vraiment sombre de toute l'échelle.
-        Mood.Overdue  -> Skin(0xFF5E0C27.toInt(), 0xFFB0301F.toInt(), 0xFFFFB65C.toInt())
+    private fun skin(v: Vibe): Skin = when (v) {
+        // Rien à prendre, en plein jour : ciel clair, soleil, deux nuages.
+        Vibe.REST_DAY   -> Skin(0xFF4FB4E8.toInt(), 0xFF4EBE8A.toInt(), 0xFFFFF6D2.toInt())
+        // Rien à prendre, la nuit : la seule ambiance qui n'appelle à rien.
+        Vibe.REST_NIGHT -> Skin(0xFF262A63.toInt(), 0xFF5B4E96.toInt(), 0xFFFFF3C4.toInt())
         // C'est noté : menthe, confettis.
-        Mood.Cheering -> Skin(0xFF2FA98D.toInt(), 0xFF1E7F76.toInt(), 0xFFFFFFFF.toInt())
+        Vibe.WIN        -> Skin(0xFF2FA98D.toInt(), 0xFF1E7F76.toInt(), 0xFFFFFFFF.toInt())
+        // L'heure vient d'arriver. Encore neutre : il n'y a rien à se reprocher.
+        Vibe.DUE        -> Skin(0xFF2F9FD8.toInt(), 0xFF2C6CC4.toInt(), 0xFFDCF0FF.toInt())
+        // Dix minutes. Le premier cran de couleur, à peine.
+        Vibe.NUDGE      -> Skin(0xFF6350C6.toInt(), 0xFF8E3FBF.toInt(), 0xFFE7D3F5.toInt())
+        // Une demi-heure. Ça vire au magenta.
+        Vibe.SULK       -> Skin(0xFF9B3AAE.toInt(), 0xFFC92F79.toInt(), 0xFFF3D3E8.toInt())
+        // Une heure. Rouge, et il pleut.
+        Vibe.DRAMA      -> Skin(0xFFC42E5C.toInt(), 0xFFD9452F.toInt(), 0xFFFFD9C4.toInt())
+        // Deux heures : braises sur fond bordeaux. Le dernier cran, et ça se voit.
+        Vibe.ANGRY      -> Skin(0xFF6B0C1C.toInt(), 0xFFB82A1B.toInt(), 0xFFFFB65C.toInt())
+    }
+
+    /** Nuit de 20h à 6h : c'est là que la lune remplace le soleil. */
+    fun isNight(now: Long = System.currentTimeMillis()): Boolean {
+        val hour = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.HOUR_OF_DAY)
+        return hour >= 20 || hour < 6
+    }
+
+    /**
+     * L'ambiance du moment. [lateMin] n'est lu que si une dose est effectivement due —
+     * les paliers viennent de [Tier] plutôt que d'une seconde liste de seuils, sinon le
+     * décor et le texte du rappel finiraient par escalader à des minutes différentes.
+     */
+    fun vibeFor(mood: Mood, lateMin: Long, now: Long = System.currentTimeMillis()): Vibe =
+        when (mood) {
+            Mood.Cheering -> Vibe.WIN
+            Mood.Sleeping -> if (isNight(now)) Vibe.REST_NIGHT else Vibe.REST_DAY
+            else -> vibeFor(Tier.forLateness(lateMin))
+        }
+
+    /** Le palier du rappel, traduit en décor : la bannière connaît son [Tier], pas l'heure. */
+    fun vibeFor(tier: Tier): Vibe = when (tier) {
+        Tier.PONCTUEL -> Vibe.DUE
+        Tier.RELANCE  -> Vibe.NUDGE
+        Tier.BOUDERIE -> Vibe.SULK
+        Tier.DRAME    -> Vibe.DRAMA
+        Tier.SERIEUX  -> Vibe.ANGRY
     }
 
     // ---- le décor ---------------------------------------------------------
@@ -50,8 +92,8 @@ object NotifArt {
      * rectangle inerte. Ici il y a une lune, des braises, de la pluie — et ça vaut la
      * peine parce que c'est ce qu'on regarde toute la journée sur l'écran d'accueil.
      */
-    private fun scene(c: Canvas, w: Float, h: Float, mood: Mood, radius: Float) {
-        val sk = skin(mood)
+    private fun scene(c: Canvas, w: Float, h: Float, v: Vibe, night: Boolean, radius: Float) {
+        val sk = skin(v)
         val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { isDither = true }
         val box = RectF(0f, 0f, w, h)
 
@@ -65,70 +107,35 @@ object NotifArt {
         }
 
         val u = minOf(w, h) / 400f          // l'unité : le décor suit la plus petite dimension
-        val rng = Random(mood.ordinal * 31 + 7)
+        val rng = Random(v.ordinal * 31 + 7)
 
-        when (mood) {
-            Mood.Sleeping -> {
-                halo(c, p, w * 0.80f, h * 0.20f, 62f * u, 0x33FFFFFF)
-                // Le croissant est une différence de deux disques et non un disque
-                // repeint par-dessus : le ciel est un dégradé, donc aucune couleur unie
-                // ne saurait refermer la morsure sans laisser une tache.
-                p.color = sk.glow
-                val disc = Path().apply { addCircle(w * 0.80f, h * 0.20f, 30f * u, Path.Direction.CW) }
-                val bite = Path().apply { addCircle(w * 0.71f, h * 0.155f, 27f * u, Path.Direction.CW) }
-                disc.op(bite, Path.Op.DIFFERENCE)
-                c.drawPath(disc, p)
-                p.color = 0xCCFFFFFF.toInt()
-                repeat(16) {
-                    val x = rng.nextFloat() * w
-                    val y = rng.nextFloat() * h * 0.72f
-                    sparkle(c, p, x, y, (2.5f + rng.nextFloat() * 4.5f) * u)
-                }
-            }
-
-            Mood.Waiting -> {
-                halo(c, p, w * 0.82f, h * 0.24f, 78f * u, 0x40FFFFFF)
-                p.color = sk.glow
-                c.drawCircle(w * 0.82f, h * 0.24f, 34f * u, p)
-                p.color = 0x33FFFFFF                              // deux nuages plats
-                c.drawRoundRect(RectF(w * 0.05f, h * 0.34f, w * 0.42f, h * 0.40f), h, h, p)
-                c.drawRoundRect(RectF(w * 0.55f, h * 0.46f, w * 0.92f, h * 0.51f), h, h, p)
-            }
-
-            Mood.Sad -> {
-                p.color = 0x33FFFFFF
-                c.drawRoundRect(RectF(w * 0.08f, h * 0.14f, w * 0.52f, h * 0.22f), h, h, p)
-                c.drawRoundRect(RectF(w * 0.52f, h * 0.26f, w * 0.94f, h * 0.33f), h, h, p)
-                p.strokeWidth = 2.4f * u                          // la pluie, en biais
-                p.strokeCap = Paint.Cap.ROUND
-                p.style = Paint.Style.STROKE
-                p.color = 0x59FFFFFF
-                repeat(18) {
-                    val x = rng.nextFloat() * w * 1.1f - w * 0.05f
-                    val y = h * 0.18f + rng.nextFloat() * h * 0.62f
-                    c.drawLine(x, y, x - 5f * u, y + 16f * u, p)
-                }
-                p.style = Paint.Style.FILL
-            }
-
-            Mood.Overdue -> {
-                halo(c, p, w * 0.5f, h * 1.02f, h * 0.66f, 0x3DFFB65C)
-                repeat(14) {                                      // les braises qui montent
-                    val x = rng.nextFloat() * w
-                    val y = h * 0.28f + rng.nextFloat() * h * 0.62f
-                    val r = (2f + rng.nextFloat() * 4f) * u
-                    p.color = if (rng.nextBoolean()) 0x99FFC46B.toInt() else 0x66FFFFFF
-                    c.drawCircle(x, y, r, p)
-                }
-            }
-
-            Mood.Cheering -> {
+        when (v) {
+            Vibe.REST_DAY   -> { sun(c, p, w, h, u, sk.glow); clouds(c, p, w, h) }
+            Vibe.REST_NIGHT -> { moon(c, p, w, h, u, sk.glow); stars(c, p, w, h, u, rng) }
+            Vibe.WIN        -> {
                 halo(c, p, w * 0.5f, h * 0.42f, minOf(w, h) * 0.52f, 0x33FFFFFF)
                 repeat(14) {
-                    val x = rng.nextFloat() * w
-                    val y = rng.nextFloat() * h * 0.82f
                     p.color = 0x99FFFFFF.toInt()
-                    sparkle(c, p, x, y, (3f + rng.nextFloat() * 5f) * u)
+                    sparkle(
+                        c, p, rng.nextFloat() * w, rng.nextFloat() * h * 0.82f,
+                        (3f + rng.nextFloat() * 5f) * u
+                    )
+                }
+            }
+            // Les paliers de retard n'ont ni soleil ni lune : ils empruntent au ciel du
+            // moment ce qu'il a de discret, et gardent la couleur pour dire le retard.
+            Vibe.DUE, Vibe.NUDGE -> if (night) stars(c, p, w, h, u, rng) else clouds(c, p, w, h)
+            Vibe.SULK -> {
+                if (night) stars(c, p, w, h, u, rng) else clouds(c, p, w, h)
+                rain(c, p, w, h, u, rng, 10)
+            }
+            Vibe.DRAMA -> rain(c, p, w, h, u, rng, 20)
+            Vibe.ANGRY -> {
+                halo(c, p, w * 0.5f, h * 1.02f, h * 0.66f, 0x4DFFB65C)
+                repeat(16) {                                      // les braises qui montent
+                    val r = (2f + rng.nextFloat() * 4f) * u
+                    p.color = if (rng.nextBoolean()) 0xB3FFC46B.toInt() else 0x73FFFFFF
+                    c.drawCircle(rng.nextFloat() * w, h * 0.24f + rng.nextFloat() * h * 0.66f, r, p)
                 }
             }
         }
@@ -156,16 +163,66 @@ object NotifArt {
         p.color = 0x26FFFFFF
         c.drawOval(RectF(-w * 0.25f, h * 0.80f, w * 1.25f, h * 1.6f), p)
 
-        // Un voile sombre en haut. Le texte du widget est écrit à même le décor, et le
-        // décor va du bleu nuit au jaune levant : sans ce voile, aucune couleur d'encre
-        // ne tiendrait sur les cinq humeurs. Avec, le blanc marche partout.
+        // Un voile sombre sur toute la hauteur, plus dense en haut. Le texte du widget est
+        // écrit à même le décor, et le décor va du bleu nuit au ciel de midi : sans ce
+        // voile, aucune couleur d'encre ne tiendrait sur les huit ambiances. Avec, le
+        // blanc marche partout, et c'est le message qui reste lisible quand la tuile change.
         p.shader = LinearGradient(
-            0f, 0f, 0f, h * 0.62f, 0x59000000, 0x00000000, Shader.TileMode.CLAMP
+            0f, 0f, 0f, h, 0x5E000000, 0x1F000000, Shader.TileMode.CLAMP
         )
-        c.drawRect(0f, 0f, w, h * 0.62f, p)
+        c.drawRect(0f, 0f, w, h, p)
         p.shader = null
 
         c.restore()
+    }
+
+    // ---- les éléments du ciel ---------------------------------------------
+
+    private fun sun(c: Canvas, p: Paint, w: Float, h: Float, u: Float, glow: Int) {
+        halo(c, p, w * 0.82f, h * 0.20f, 84f * u, 0x47FFFFFF)
+        p.color = glow
+        c.drawCircle(w * 0.82f, h * 0.20f, 32f * u, p)
+    }
+
+    private fun moon(c: Canvas, p: Paint, w: Float, h: Float, u: Float, glow: Int) {
+        halo(c, p, w * 0.80f, h * 0.20f, 62f * u, 0x33FFFFFF)
+        // Le croissant est une différence de deux disques et non un disque repeint
+        // par-dessus : le ciel est un dégradé, donc aucune couleur unie ne saurait
+        // refermer la morsure sans laisser une tache.
+        p.color = glow
+        val disc = Path().apply { addCircle(w * 0.80f, h * 0.20f, 30f * u, Path.Direction.CW) }
+        val bite = Path().apply { addCircle(w * 0.71f, h * 0.155f, 27f * u, Path.Direction.CW) }
+        disc.op(bite, Path.Op.DIFFERENCE)
+        c.drawPath(disc, p)
+    }
+
+    private fun stars(c: Canvas, p: Paint, w: Float, h: Float, u: Float, rng: Random) {
+        p.color = 0xCCFFFFFF.toInt()
+        repeat(16) {
+            sparkle(
+                c, p, rng.nextFloat() * w, rng.nextFloat() * h * 0.72f,
+                (2.5f + rng.nextFloat() * 4.5f) * u
+            )
+        }
+    }
+
+    private fun clouds(c: Canvas, p: Paint, w: Float, h: Float) {
+        p.color = 0x33FFFFFF
+        c.drawRoundRect(RectF(w * 0.04f, h * 0.30f, w * 0.40f, h * 0.36f), h, h, p)
+        c.drawRoundRect(RectF(w * 0.54f, h * 0.44f, w * 0.93f, h * 0.49f), h, h, p)
+    }
+
+    private fun rain(c: Canvas, p: Paint, w: Float, h: Float, u: Float, rng: Random, drops: Int) {
+        p.strokeWidth = 2.4f * u
+        p.strokeCap = Paint.Cap.ROUND
+        p.style = Paint.Style.STROKE
+        p.color = 0x66FFFFFF
+        repeat(drops) {
+            val x = rng.nextFloat() * w * 1.1f - w * 0.05f
+            val y = h * 0.16f + rng.nextFloat() * h * 0.64f
+            c.drawLine(x, y, x - 5f * u, y + 16f * u, p)
+        }
+        p.style = Paint.Style.FILL
     }
 
     /** Une lueur ronde qui s'éteint vers le bord : lune, soleil, chaleur des braises. */
@@ -178,9 +235,9 @@ object NotifArt {
     }
 
     /** Le fond du widget : carré, coins arrondis découpés dans le bitmap lui-même. */
-    fun widgetBg(px: Int, mood: Mood): Bitmap {
+    fun widgetBg(px: Int, vibe: Vibe, night: Boolean): Bitmap {
         val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-        scene(Canvas(bmp), px.toFloat(), px.toFloat(), mood, px * 0.14f)
+        scene(Canvas(bmp), px.toFloat(), px.toFloat(), vibe, night, px * 0.14f)
         return bmp
     }
 
@@ -323,7 +380,7 @@ object NotifArt {
      * encore, la police rétrécit d'un cran. Une phrase coupée au milieu était le seul
      * vrai défaut de la version précédente.
      */
-    fun banner(mood: Mood, title: String, body: String): Bitmap {
+    fun banner(mood: Mood, vibe: Vibe, title: String, body: String): Bitmap {
         val w = BANNER_W.toFloat()
         val bubbleL = 368f
         val bubbleR = w - 34f
@@ -363,32 +420,59 @@ object NotifArt {
         val c = Canvas(bmp)
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        scene(c, w, h, mood, 0f)
+        scene(c, w, h, vibe, isNight(), 0f)
 
         // Le dragon, calé en bas à gauche, posé sur la bosse de sol du décor. Plafonné
         // à 348 : au-delà il passerait sous la bulle, et un dragon à moitié caché
         // derrière un rectangle blanc est pire qu'un dragon un peu plus petit.
         val dragonSize = minOf(h * 0.80f, 348f)
+        val dragonY = h - dragonSize - h * 0.04f
         c.save()
-        c.translate(14f, h - dragonSize - h * 0.04f)
+        c.translate(14f, dragonY)
         Dragon.draw(c, mood, dragonSize)
         c.restore()
+
+        // Ce qui flotte AU-DESSUS du dragon : une gélule quand il attend la dose, des
+        // cœurs quand elle est prise. Au-dessus et pas à côté parce qu'il n'y a pas de
+        // « à côté » : cornes et ailes occupent toute la largeur du dessin, et le ciel
+        // au-dessus de sa tête est la seule zone libre entre lui et la bulle.
+        val ds = dragonSize / 220f
+        prop(c, p, vibe, 14f + dragonSize * 0.62f, dragonY * 0.52f, ds * 0.85f)
 
         // la bulle, centrée verticalement sur son propre contenu
         val bubbleH = block + inset * 2
         val top = (h - bubbleH) / 2f
         val bubble = RectF(bubbleL, top, bubbleR, top + bubbleH)
-        p.color = 0x33000000
-        c.drawRoundRect(RectF(bubble).apply { offset(0f, 6f) }, 44f, 44f, p)
-        p.color = 0xFAFFFFFF.toInt()
-        c.drawRoundRect(bubble, 44f, 44f, p)
-        Path().apply {                                  // la queue, pointée vers la tête
-            val ty = top + bubbleH * 0.34f
-            moveTo(bubbleL + 2f, ty - 26f)
-            lineTo(bubbleL - 34f, ty + 6f)
-            lineTo(bubbleL + 2f, ty + 34f)
+        val tailY = top + bubbleH * 0.34f
+        val tail = Path().apply {                       // la queue, pointée vers la tête
+            moveTo(bubbleL + 2f, tailY - 26f)
+            lineTo(bubbleL - 36f, tailY + 6f)
+            lineTo(bubbleL + 2f, tailY + 34f)
             close()
-        }.also { c.drawPath(it, p) }
+        }
+
+        // L'ombre portée est dessinée sur la bulle ET sa queue d'un seul tenant : deux
+        // ombres séparées laissent une couture visible là où elles se recouvrent.
+        val shell = Path().apply {
+            addRoundRect(bubble, 44f, 44f, Path.Direction.CW)
+            op(tail, Path.Op.UNION)
+        }
+        c.save()
+        c.translate(0f, 7f)
+        p.color = 0x2E000000
+        c.drawPath(shell, p)
+        c.restore()
+
+        p.color = 0xFCFFFFFF.toInt()
+        c.drawPath(shell, p)
+        // Un liseré dans la couleur du moment : la bulle reste blanche — c'est ce qui
+        // garantit la lisibilité sur les huit décors — mais elle cesse d'être le même
+        // rectangle blanc à toutes les heures de la journée.
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 5f
+        p.color = withAlpha(skin(vibe).ground, 0x66)
+        c.drawPath(shell, p)
+        p.style = Paint.Style.FILL
 
         var y = top + inset + titleP.textSize * 0.82f
         titleLines.forEach { c.drawText(it, bubbleL + inset, y, titleP); y += titleStep }
@@ -397,6 +481,62 @@ object NotifArt {
             bodyLines.forEach { c.drawText(it, bubbleL + inset, y, bodyP); y += bodyStep }
         }
         return bmp
+    }
+
+    private fun withAlpha(color: Int, alpha: Int) = (color and 0x00FFFFFF) or (alpha shl 24)
+
+    /**
+     * Le petit objet qui flotte à côté du dragon. Trois seulement — une gélule, des
+     * cœurs, une goutte de sueur — parce qu'au-delà ça devient un catalogue d'autocollants
+     * et le personnage disparaît derrière ses accessoires.
+     */
+    private fun prop(c: Canvas, p: Paint, v: Vibe, cx: Float, cy: Float, s: Float) {
+        when (v) {
+            Vibe.WIN -> {
+                p.color = 0xF2FF6B8A.toInt()
+                heart(c, p, cx, cy, 17f * s)
+                heart(c, p, cx + 26f * s, cy - 30f * s, 11f * s)
+            }
+            Vibe.REST_DAY, Vibe.REST_NIGHT -> Unit          // rien à tenir : il dort
+            Vibe.SULK, Vibe.DRAMA, Vibe.ANGRY -> {
+                // la goutte de sueur des mangas, penchée vers l'arrière
+                p.color = 0xE6BFE4F2.toInt()
+                Path().apply {
+                    moveTo(cx, cy - 22f * s)
+                    cubicTo(cx + 13f * s, cy - 3f * s, cx + 13f * s, cy + 13f * s, cx, cy + 13f * s)
+                    cubicTo(cx - 13f * s, cy + 13f * s, cx - 13f * s, cy - 3f * s, cx, cy - 22f * s)
+                    close()
+                }.also { c.drawPath(it, p) }
+            }
+            Vibe.DUE, Vibe.NUDGE -> {
+                // la gélule, en biais : moitié blanche, moitié framboise, comme dans l'app
+                c.save()
+                c.rotate(-28f, cx, cy)
+                val pill = RectF(cx - 26f * s, cy - 13f * s, cx + 26f * s, cy + 13f * s)
+                p.color = 0xFFFFFFFF.toInt()
+                c.drawRoundRect(pill, 13f * s, 13f * s, p)
+                c.save()
+                c.clipRect(cx - 26f * s, cy - 13f * s, cx, cy + 13f * s)
+                p.color = Dragon.Blush
+                c.drawRoundRect(pill, 13f * s, 13f * s, p)
+                c.restore()
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = 3f * s
+                p.color = 0x40000000
+                c.drawRoundRect(pill, 13f * s, 13f * s, p)
+                p.style = Paint.Style.FILL
+                c.restore()
+            }
+        }
+    }
+
+    private fun heart(c: Canvas, p: Paint, cx: Float, cy: Float, r: Float) {
+        Path().apply {
+            moveTo(cx, cy + r * 0.85f)
+            cubicTo(cx - r * 1.5f, cy - r * 0.2f, cx - r * 0.5f, cy - r * 1.2f, cx, cy - r * 0.35f)
+            cubicTo(cx + r * 0.5f, cy - r * 1.2f, cx + r * 1.5f, cy - r * 0.2f, cx, cy + r * 0.85f)
+            close()
+        }.also { c.drawPath(it, p) }
     }
 
     /**

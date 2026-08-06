@@ -61,4 +61,11 @@ dependencies {
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
+
+    // Les tests tournent sur la JVM, sans émulateur : tout ce qui compte les jours est
+    // écrit contre l'interface `MedDao`, pas contre Room, donc un faux DAO en mémoire
+    // suffit. Une suite qui demande un appareil est une suite qu'on finit par ne plus
+    // lancer.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }

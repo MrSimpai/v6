@@ -57,16 +57,21 @@ familiar and contracted, `SERIEUX` is plain, unhurried standard French.
 
 - **A drawn banner, not text.** `BigPictureStyle` shows a panel generated on the fly:
   dragon on the left, the message in a comic speech bubble on the right, over a painted
-  scene that changes with her mood — starry night when nothing is due, sunrise when it's
-  time, rain at an hour late, embers past two. This is the single biggest reason Duo's
-  reminders read as *a character talking to you* rather than a system message. See
-  `reminder/NotifArt.kt`.
+  scene on the same `NotifArt.Vibe` ladder as the widget — blue when it's just time,
+  violet at ten minutes, magenta and rain at thirty, embers on crimson past two hours.
+  The scene climbs with the wording because both read `Tier`. This is the single biggest
+  reason Duo's reminders read as *a character talking to you* rather than a system
+  message. See `reminder/NotifArt.kt`.
 - **Nothing is ever cut off.** The banner is 1024 wide and grows in height to fit the
   message, up to the point Android starts cropping big pictures; only past that does the
   type step down a size. The earlier version was a fixed 1024×512 that silently clipped
   the last lines of the longer messages, which is exactly the ones that mattered.
 - **The text sits in a white bubble, not on the art.** The scene runs from midnight blue
-  to pale sunrise depending on the tier, and no single ink colour is legible on both.
+  to bright daylight depending on the tier, and no single ink colour is legible on both.
+  The bubble stays white for exactly that reason, but takes a hairline border in the
+  current vibe's colour so it isn't the same white rectangle at every hour of the day.
+- **A prop in the dragon's hand**, chosen by the same vibe: a capsule while the dose is
+  waiting, a sweat-drop once it's late, hearts when it's logged.
 - **The dragon's face as the large icon**, cropped round, matching her current mood.
 - **Colorized** notification tinted to the dragon's pink (plum in the serious tier).
 - **It does not go away.** Ongoing, non-swipeable, with a `deleteIntent` that re-posts it.
@@ -85,13 +90,22 @@ persistent. It also meant shoving her into a Settings screen on first launch to 
 ## The app icon changes with her mood
 
 Android can't repaint a launcher icon at runtime, but it *can* swap which
-`<activity-alias>` is the enabled launcher entry. Four aliases, exactly one enabled:
+`<activity-alias>` is the enabled launcher entry. Exactly one is enabled at a time, and
+which one is chosen by `NotifArt.Vibe` -- **the same ladder that colours the widget and
+the notification banner**. Icon, tile and reminder are always the same colour:
 
-| State | Icon |
-|---|---|
-| nothing due, or dose just logged | teal, eyes closed, sleeping |
-| dose owed (incl. 1h late) | apricot, wide eyes, holding a pill |
-| 2h+ overdue | terracotta, lowered brows, frowning |
+| Vibe | Alias | Icon |
+|---|---|---|
+| `REST_DAY` / `REST_NIGHT` / `WIN` | `.Calm` | green, eyes closed, sleeping |
+| `DUE` / `NUDGE` | `.Waiting` | blue, wide eyes, holding a pill |
+| `SULK` / `DRAMA` | `.Late` | magenta, frowning |
+| `ANGRY` | `.Overdue` | terracotta, lowered brows |
+
+Four steps, not eight, because every swap costs a launcher redraw -- the icon tracks
+*whether there's something to do and roughly how long it's been*, not every shade the
+widget goes through. The icon backgrounds in `ic_colors.xml` are a notch lighter than
+the matching `NotifArt.skin` values: an icon is a quarter the size of a tile, and the
+darkest scene colours read as a black smudge at that scale.
 
 There is deliberately **no** "just logged" icon, though `ic_launcher_happy` is still in
 the tree. It was a four-second state on a surface she isn't looking at -- she's inside
@@ -128,6 +142,26 @@ All state lives in Room and AlarmManager, so a restart is otherwise harmless.
 on-screen dragon and the notification dragon are the same code and can't drift apart.
 Five moods: `Sleeping`, `Waiting`, `Overdue`, `Cheering`, `Sad`. Zero image assets — she's
 all vectors, so she scales to any density and adds nothing to the APK.
+
+### The clock has to be state, or the dragon freezes
+
+`HomeScreen` derives her mood from the current time, and the current time is not something
+Compose observes. A plain `System.currentTimeMillis()` at the top of the composable is read
+once and then frozen, and since nothing recomposes until the database changes, her face
+stopped updating: a dose came due, the lateness crossed an hour, and she kept whatever
+expression she had when the screen was first composed — until the app was closed and
+reopened, which built a fresh composition. That was the bug, and it looked exactly like
+"the mood only updates on restart".
+
+So `now` is `mutableStateOf`, ticked every 20 seconds inside
+`repeatOnLifecycle(RESUMED)`. That scope matters twice over: nothing ticks while the
+screen isn't in front of anyone, and the value is refreshed the instant it comes back, so
+there's no stale dragon for the first twenty seconds after unlocking.
+
+Everything time-dependent on that screen reads the same `now` — `todayAt`, `canLogNow`,
+the date header. Passing it explicitly rather than letting each call default to
+`System.currentTimeMillis()` means the whole screen agrees on what time it is, instead of
+each part depending on the accident of when it was last recomposed.
 
 **The current drawing follows the reference art.** Palette straight off it: `#C03765`
 body, `#A21E50` horns and jaw frills, `#A83063` wing membrane, `#7A1B45` feet, `#F1BBCB`
@@ -219,6 +253,72 @@ Both walk backwards with `Calendar.add(DAY_OF_YEAR, -1)` rather than subtracting
 a day is 23 or 25 hours long -- millisecond arithmetic lands an hour off, finds no log,
 and silently resets a streak of any length to one. Twice a year, invisibly.
 
+### A day is only judged on the medications that existed then
+
+Every day is scored against `meds.dueOn(dayStart)` -- the medications whose `createdAt`
+falls on or before that day -- not against every currently-active medication.
+
+Without that filter, **adding a second medication wiped the streak and emptied the week**.
+The new one had no dose logged for yesterday, so yesterday stopped being a complete day,
+so everything before it became unreachable; `weekStatus` turned every prior day to MISSED
+for the same reason. Nothing about the UI could have explained why.
+
+Two consequences worth knowing:
+
+- `perfectDayStreak` stops at the first day where *nothing* was due. Without that, days
+  before the first medication existed would be vacuously "complete" and the loop would
+  walk its full ten-year bound and report a streak of 3650.
+- Days before any medication existed render as `FUTURE`, not `MISSED`. It's the same
+  barely-there dot, and it's the same thing to say: nothing was asked of that day.
+
+`createdAt` defaults to `0` in `MIGRATION_3_4` -- "has always existed" -- so medications
+already installed keep exactly the streak and week they had before the update. Setting it
+to `now` would have reset everyone's history, which is the bug being fixed. `AddMedication`
+preserves it through edits for the same reason, since that screen is both add and edit.
+The day of creation *does* count, deliberately: judging by slot time instead would mean
+that installing the app in the evening with a morning pill makes day one free, and day one
+is the one you most want to count.
+
+### A dose belongs to a day, not to a millisecond
+
+`logForSlot` looks for a dose anywhere inside the slot's **calendar day** rather than at
+the slot's exact timestamp. This is not a nicety.
+
+A `DoseLog` stores `scheduledFor` -- the time the medication was set to *when the dose was
+taken*. Every lookup recomputes that timestamp from the medication's *current*
+`hourOfDay`/`minute`. So moving a reminder by five minutes used to make every past dose
+for that medication unfindable: streak back to one, week dots emptied, drift chart blank,
+with the rows still sitting untouched in the database. Editing the time is one of the
+first things anyone does after installing, which made it a first-week bug.
+
+The schema holds one time per medication, so "that medication, that day" always names
+exactly one dose. `driftMinutes` still reads the stored `scheduledFor`, so how late you
+actually were stays true even after the reminder moves.
+
+### The pill you took at 00:30 last night
+
+`Slots.loggableSlots(med, now)` returns the slots a tap can satisfy right now, best first:
+today's, from two hours before its time onwards, and — for six hours after its time —
+**yesterday's**.
+
+The second one exists because a 21h pill taken at 00:30 could not be recorded at all.
+`todayAt` resolves to the current calendar day and must keep doing so (see the note above
+it: making it reach backwards once made a 9am dose read as nineteen hours overdue at 4am),
+so at 00:30 the 21h slot meant *tonight*, twenty hours out, the window wasn't open, and
+the button was greyed. The pill she was physically holding had nowhere to go, and
+yesterday stayed missed.
+
+Six hours is the line between the two cases: a 21h pill at 00:30 is obviously last
+night's; a 9h pill "taken" at 1am the next day is a missed day being papered over. Today's
+window still has no upper bound, so a morning dose is loggable all evening as before.
+
+It's a pure function with no database, because three callers ask the same question with
+different data in hand — the screen has `takenDays`, the rest have the DAO. What must not
+diverge is the *rule*; each caller checks what's already logged for itself. And when the
+tap is going to credit yesterday, the button says so — **"Je l'ai prise (hier soir)"**. A
+button that records something other than what you think it records is worse than a greyed
+one.
+
 ### Two message sets, and which is which
 
 `FloMessages` holds two celebration pools, and getting them the wrong way round makes the
@@ -252,10 +352,34 @@ also requires the display to be on and the keyguard down. When she is watching, 
 notification is posted at all -- the cheering dragon on screen is already the message,
 and a notification on top would be the same news twice.
 
-## The evening countdown
+## One notification per medication, all day
 
-At 21h, if anything is still unlogged, a notification appears with a **live ticking clock
-counting down to midnight** -- the moment the day, and the streak, turns over.
+`notifId(tagId)` is a single id, and the head-up, the reminder and every re-post land on
+it. They **replace** each other instead of stacking. In the drawer there is one line per
+medication that changes tone through the day, which reads like someone talking; two lines
+saying the same thing in different registers reads like software nagging.
+
+This replaced two separate stacking bugs:
+
+- The 15-minute head-up had its own id, so at the scheduled minute *"c'est bientôt
+  l'heure"* and *"c'est l'heure"* sat one above the other -- a notification announcing
+  there was a pill, directly above the notification of the pill.
+- An evening countdown posted at 21h listing everything still owed. It could only ever
+  appear **on top of** a reminder: it fired only when a dose was outstanding, and an
+  outstanding dose always has its own ongoing reminder. So it was always a duplicate.
+  Its channel is deleted in `ensureChannels` rather than merely abandoned, so it doesn't
+  linger forever in the phone's notification settings under a name that means nothing.
+
+## The countdown runs to the top of the ladder, not to midnight
+
+The reminder carries a **live ticking clock counting down to `slot + 2h`** -- the moment
+`Tier.SERIEUX` begins and the dragon stops joking.
+
+It used to count down to midnight, which was a deadline the app didn't keep: nothing in
+particular happened at zero, and a clock grinding through six hours doesn't hurry anyone.
+Two hours is a real deadline with a visible consequence, and it's short enough to feel.
+Past it there's nothing left to count, so the chronometer is dropped entirely rather than
+counting back up with a minus sign.
 
 The ticking is the whole point, and it's why this uses `setUsesChronometer` +
 `setChronometerCountDown` rather than writing the remaining time into the text. A sentence
@@ -263,22 +387,34 @@ saying "il reste 2 heures" is frozen at whatever it said when it was posted, and
 fact you read. A clock visibly counting down is handed to the system, stays accurate
 without the app waking up once, and reads as pressure. That's the Duolingo trick.
 
-`setTimeoutAfter(midnight - now)` makes it delete itself exactly as the countdown hits
-zero, so there's never a dead countdown sitting in the shade at 3am.
-
-`refreshLastCall()` is called both by the 21h alarm and after any dose is logged, and it
-decides for itself whether to post or clear. So logging the last pill at 22h makes the
-countdown vanish on its own, and it re-arms tomorrow's alarm on the way out.
-
-It uses its own channel (*Série en jeu*, `IMPORTANCE_DEFAULT`), so it can be muted
-separately from the reminder itself without losing the thing that actually matters.
+The 15-minute head-up gets the same treatment, counting down to the scheduled minute.
 
 ## Cosmetics, chests and the locker
 
-One piece of clothing per **complete day**, never twice the same, permanent once earned.
-Three exist so far -- a bobble tuque with holes for the horns, little red boots, and a
-Christmas hoodie. The catalogue is `Cosmetics.ALL`; adding a fourth is one entry there
-plus one drawing function in `Dragon.kt` keyed on the same id. Nothing else needs touching.
+One piece per **complete day**, never twice the same, permanent once earned. Seventeen
+exist, across five slots. The catalogue is `Cosmetics.ALL`; adding another is one entry
+there plus one drawing function in `Dragon.kt` keyed on the same id. Nothing else needs
+touching — `LockerScreen` iterates `Slot.entries`, so a new slot appears on its own.
+
+Two of the five slots don't behave like clothing:
+
+- **`WINGS`** replaces a body part rather than sitting on top of one. The dragon already
+  has wings, so `Dragon.wing()` takes the piece as a parameter; drawing the cosmetic
+  afterwards like a hat would leave two pairs overlapping. Nine variants share four
+  silhouettes — bat, feathered, butterfly, dragonfly — with the colour and detail doing
+  the rest.
+- **`FRIEND`** isn't worn at all. It sits on the ground to her right, drawn *after* the
+  breathing bob is restored: a plush that rises and falls in time with the dragon reads as
+  levitating. Right rather than left because the tail sweeps left and the ground shadow
+  ends around x=164, which makes that corner the only reliably empty space whatever else
+  she's wearing.
+
+None of the wings use a `Shader`, and that's deliberate rather than stylistic: a shader
+overrides the paint colour, which would bypass the locker's silhouette tint and show a
+locked piece in full colour. The ember and rainbow fades are bands of flat colour clipped
+to the wing outline instead. The tattered Halloween pair cuts its holes out of the path
+with `Path.Op.DIFFERENCE` rather than painting over them, since there's no background
+colour to paint with.
 
 Adding a medication is its own full screen rather than a bottom sheet: the keyboard eats
 half a modal sheet, leaving three fields crammed into two centimetres.
@@ -300,6 +436,29 @@ would lose it at the single most infuriating moment possible.
 **The locker** is a page to the left of home, reached by swiping, Clash Royale style. Two
 small dots at the bottom of the screen are the only sign it exists -- no tab, because it
 must never compete with the one thing that matters.
+
+### The fitting room
+
+Typing **"Je t'aime"** into the box at the very bottom of the locker opens the whole
+catalogue for five minutes.
+
+It is a *fitting room*, not a shortcut. Nothing that happens inside the window reaches the
+database — not what she puts on, not what she takes off — so when it expires her real
+outfit is still exactly where it was. Pieces are still earned one per complete day, which
+is the only thing that gives them any value; a word that handed them over for good would
+leave the locker with no reason to be opened tomorrow.
+
+It sits at the **very bottom**, below the full collection, on purpose. You have to scroll
+past everything still locked to reach it, so you've already seen what there is to want.
+Found before that, it would replace the wanting; found after, it feeds it.
+
+The comparison strips accents, apostrophes, spaces and case (`Cosmetics.isPreviewCode`).
+The apostrophe in *t'aime* comes out curly on half the keyboards in existence, and a
+password you have to type character-perfect is a password that doesn't work on the evening
+you actually want it.
+
+The widget keeps showing the real outfit throughout, since it reads the database. The
+try-on only exists inside the app, which is the only place the countdown is visible.
 
 Pieces are grouped by slot and **one is worn per slot**: equipping a hat silently removes
 the hat already there, rather than showing an error. Nobody wants to read "please remove
@@ -352,6 +511,77 @@ is clutter the other 363 days, and the home screen has to answer exactly one que
 have I taken my pill -- with everything that doesn't answer it pushed to one side or the
 other. Three pages now: locker left, home centre, settings right.
 
+### Proving a reminder actually fired
+
+`ReminderHealth` detects that the battery is *restricted* — a risk. `silentMisses`
+detects a **failure**: a slot came and went, no reminder was posted, and no dose was
+logged.
+
+Every time `post` actually hands a notification to the system, it writes a `ReminderPost`
+row for that `(tagId, slot)`. On the day One UI puts the app to sleep and the alarm never
+fires, that row is missing, and the app can say so instead of failing in silence. This is
+the failure mode the whole file worries about, and until now nothing could observe it —
+which is the worst possible property for a medication app, because the person has stopped
+checking for herself.
+
+All three conditions matter, and each rules out a false positive:
+
+- **No dose logged.** Taking a dose early cancels the reminder before it ever posts. Without
+  this check, every early dose would be reported as a breakage.
+- **The medication existed.** `dueOn` again, so a medication added on Tuesday isn't blamed
+  for Monday.
+- **Completed days only.** Today's slot may have passed a minute ago with its alarm mid-flight.
+  Counting it would be a race against the clock, and a warning that appears and clears itself
+  means nothing.
+
+It shows on the **home screen**, which the battery warning deliberately isn't allowed to
+do. The difference is that the battery warning is permanent and becomes furniture; this
+one appears only on the day a reminder genuinely didn't arrive, and on that day it's the
+most important thing on the screen. Logging the missing dose clears it on its own.
+
+## The Sunday recap
+
+Every other notification in this app starts from a problem: it's time, it's late, it's very
+late. An app that only ever speaks to demand something becomes a chore no matter how well
+the lines are written. `postRecap` fires Sunday at 19h and does nothing but report the week
+— days completed out of seven, and the streak.
+
+**It only posts if nothing is still owed.** Congratulating someone while a reminder is
+still on screen would be two notifications for one day, one of them celebrating too early
+— exactly what the last-call countdown was removed for. That condition also means the
+recap only ever arrives once Sunday is genuinely finished.
+
+The tone tracks what actually happened but none of the versions scold: it's Sunday evening,
+the week is over, there is nothing left to recover, and blame at that moment buys nothing.
+Low-importance channel, no vibration, and its own id so next Sunday's replaces this one.
+
+Being an inexact alarm, it survives neither reboot nor update, so it's re-armed in
+`onCreate` and in `rescheduleAll`. Arming it twice replaces it rather than stacking.
+
+### The nagging goes quiet before she does
+
+`Reminders.Alert` decides whether a post is allowed to make noise:
+
+| | Sound? |
+|---|---|
+| `DUE` — the scheduled minute | always, whatever time it is |
+| `NAG` — a repeat | only below `SERIEUX`, and only outside 22h–08h |
+| `SILENT` — re-post after a swipe | never |
+
+This used to be one boolean, true for the scheduled minute *and* every repeat. A dose
+missed at 21h therefore rang at alarm volume every ten minutes until midnight, on a
+channel with `setBypassDnd(true)` and `USAGE_ALARM`. The first ring is the whole point of
+a medication reminder and still goes through unconditionally; the twelfth at 3am wakes
+nobody usefully and only teaches you to turn the app's notifications off, which ends
+everything.
+
+The repeat interval backs off too: at `SERIEUX` the next nag is armed for **just after
+midnight** instead of ten minutes out. It cannot simply stop, and this is the trap --
+that alarm is what clears the stale reminder once the day turns over and arms the next
+day's, via the early return in `onAlarm`. Dropping it would leave yesterday's "you're
+late" pinned to the screen and, far worse, no reminders at all on the following days until
+the app was opened by hand.
+
 ## Backup
 
 On the settings page. Local JSON to a file she picks: medications, every log, cosmetics,
@@ -365,23 +595,63 @@ turns out to be wrong.
 
 ## The widget
 
-Laid out like a Duolingo tile: a status bar across the top (streak flame on the left,
-the week's seven dots on the right), one short line, and the dragon taking every pixel
-that's left. The dragon is on `layout_weight`, so a bigger tile draws a bigger dragon
-instead of adding a margin around a small one.
+Three bands, like a Duolingo tile: a status bar (streak flame left, the week's seven dots
+right), **the hand-written line of the day set large**, and the dragon with the current
+state along the bottom.
 
-The whole background is a painted scene in the current mood -- the same five as the
-notification banner -- so the widget changes colour through the day, which is half the
-point of having a dragon on your home screen.
+The middle band is the point of the whole widget. `dayStreakLine` is the diary -- a
+different sentence every day -- and it's on `layout_weight` so it takes every pixel the
+other two bands don't need. `autoSizeTextType="uniform"` between 10sp and 26sp does the
+rest: "jamais deux sans toi" renders huge, the Life Is A Highway verse steps down until
+it fits, and neither one ever ends in an ellipsis. That range is the only way to show
+messages running from twenty to a hundred and ten characters on two cells without
+clipping the end of a joke.
+
+The dragon gave up size for that text, which is the right trade here -- the drawing is
+the same all day, the sentence changes every morning. The tile is resizable, so making
+it bigger grows both. Below the dragon, in small type, is the one thing that's actually
+actionable: the medication owed right now, or `FloMessages.widgetLine` in three words.
 
 The streak sits in a dark translucent pill with a flame, and stays put at zero with the
 flame greyed out. A badge that appears and disappears makes the tile jump from one day
 to the next; and it is deliberately *not* a red numbered circle in the top corner, which
 is the universal sign of a pending chore rather than a reward.
 
-The line is `autoSizeTextType="uniform"`: it shrinks to fit the tile rather than ending
-in an ellipsis. `FloMessages.widgetLine` keeps it to about three words for the same
-reason -- the sentence written for the home screen doesn't fit on two cells.
+### The background escalates, and it knows what time it is
+
+`NotifArt.Vibe` is the colour ladder, shared by the widget and the notification banner:
+
+| Vibe | When | Look |
+|---|---|---|
+| `REST_DAY` | nothing owed, 06h–20h | bright sky, **sun**, two clouds |
+| `REST_NIGHT` | nothing owed, 20h–06h | indigo, **crescent moon**, stars |
+| `WIN` | dose just logged | mint, confetti |
+| `DUE` | 0–10 min late | blue |
+| `NUDGE` | 10–30 | indigo/violet |
+| `SULK` | 30–60 | magenta, light rain |
+| `DRAMA` | 60–120 | red, rain |
+| `ANGRY` | 120+ | deep crimson, embers, heat glow |
+
+This is Duo's actual mechanism: being late doesn't just change the words, it changes the
+tile's *temperature*. You can read it from across the room without reading anything.
+
+The thresholds come from `Tier.forLateness` rather than a second list, so the colour and
+the wording can never escalate at different minutes. And the rest state splits on the
+clock, because a crescent moon at three in the afternoon is the one detail that tells you
+instantly the drawing isn't looking at the time. The middle tiers carry stars at night
+and clouds by day for the same reason, and no sun or moon at all -- the colour is already
+saying the thing.
+
+The same `Vibe` also picks the banner's small prop -- a raspberry-and-white capsule while
+the dose is waiting, a manga sweat-drop once it's late, two hearts when it's logged, and
+nothing at all while the dragon is asleep. Three props, not a sticker catalogue: past
+that, the character disappears behind its own accessories.
+
+Widgets only self-refresh every 30 minutes, which is Android's floor for
+`updatePeriodMillis`, so the tile would otherwise still be blue while the reminder had
+already reached crimson. `Reminders.post` refreshes it on every nag -- the device is
+already awake at that point, so it costs nothing -- and `resolve` does too, so a dose
+logged by NFC with the app closed drops the tile back to calm at once.
 
 Earlier it also had a button that logged the dose without opening anything -- the
 shortest possible path between remembering and having recorded it. It goes through
@@ -416,9 +686,13 @@ Every other tier on the ladder reacts to lateness, which means the first word of
 was always a small accusation. `ACTION_SOON` fires fifteen minutes *before* the dose, in
 its own quiet channel with vibration off, and says nothing more than "it's nearly time".
 
-It expires by itself at the scheduled minute -- `setTimeoutAfter(slot - now)` -- because
-past that point the real reminder takes over, and two notifications saying the same thing
-in two different tones is worse than one.
+It carries a chronometer counting down to the scheduled minute, so the quarter of an hour
+visibly melts instead of being asserted in words that go stale a minute later.
+
+It posts on `notifId(tagId)` -- the reminder's own id -- so at the scheduled minute the
+real reminder *replaces* it rather than landing underneath it. It used to have its own id
+and expire via `setTimeoutAfter`, which left a window where both were on screen: a
+notification saying there was a pill, sitting directly above the notification of the pill.
 
 The alarm is inexact and `RTC` rather than `RTC_WAKEUP`: landing to the second doesn't
 matter a quarter of an hour ahead, and it doesn't justify pulling the phone out of doze.
@@ -447,6 +721,43 @@ The history view plots **when** she took each dose against when it was due. A co
 doses per week only says yes/no; the drift plot shows a 9am dose creeping toward 11am
 over two weeks, which is the pattern that comes *before* a missed one. Days with no log
 sit on the target line as hollow rings.
+
+## Tests
+
+```bash
+gradle :app:testDebugUnitTest
+```
+
+They run on the JVM with no emulator and no device, and CI runs them before the APK is
+built — a failing streak calculation fails the build instead of shipping a Release that
+loses a two-hundred-day streak.
+
+That's possible because everything that counts days is written against the `MedDao`
+**interface** rather than against Room, so `TestDao` — a few mutable lists — stands in for
+the database. A suite that needs an emulator is a suite you stop running.
+
+Every test corresponds to a bug that actually happened, or to a risk written down in a
+comment and never once executed:
+
+| Test | Guards |
+|---|---|
+| `deuxieme jour compte deux` | day two showing "day 1" |
+| `changer l heure du rappel garde l historique` | editing the reminder time erasing all history |
+| `ajouter un medicament ne casse pas la serie` | a second medication wiping the streak |
+| `la serie s arrete avant le premier medicament` | the vacuous-days loop reporting 3650 |
+| `la serie survit au changement d heure du printemps` / `de l automne` | the DST hazard `slotDaysAgo` warns about |
+| `la dose du soir se note encore apres minuit` | the 21h pill that couldn't be logged at 00:30 |
+| `une dose du matin ne se rattrape pas la nuit suivante` | that grace window swallowing a genuinely missed day |
+| `les jours d avant la creation ne sont pas manques` | a new medication emptying the week |
+| `un rappel jamais parti est signale` | the Samsung silent failure going unnoticed |
+| `une dose prise en avance n est pas une panne` | early doses being reported as breakage |
+| `une dose oubliee apres un rappel n est pas une panne` | the app confessing to someone else's forgetting |
+
+`TimeZone` is pinned to `America/Montreal` in `@Before`, otherwise the DST tests would
+pass or fail depending on which machine ran them. `T.at(2025, 6, 3, 21, 0)` builds the
+dates so a test reads out loud — one you can't read is one you can't fix the day it
+breaks. `perfectDayStreak`, `weekStatus` and `currentStreak` all take an optional `now`
+purely so tests can choose what day it is; every caller keeps the default.
 
 ## Still to add
 

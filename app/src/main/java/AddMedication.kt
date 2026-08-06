@@ -42,12 +42,18 @@ fun AddMedicationScreen(
 
     // En modification on garde la clé : c'est elle qui relie le médicament à tout son
     // historique. La perdre pour corriger une faute de frappe serait absurde.
+    //
+    // Et on garde `createdAt` pour la même raison : cet écran sert aussi bien à ajouter
+    // qu'à modifier, donc laisser la valeur par défaut ferait passer un médicament de
+    // deux ans pour un médicament créé à l'instant à chaque changement d'horaire — et la
+    // série cesserait de compter tout ce qui précède la modification.
     fun draft() = Medication(
         tagId = existing?.tagId ?: "",
         name = name.ifBlank { "Mon médicament" },
         doseText = dose.ifBlank { "1 dose" },
         hourOfDay = hour, minute = minute,
-        nagEveryMinutes = existing?.nagEveryMinutes ?: 10
+        nagEveryMinutes = existing?.nagEveryMinutes ?: 10,
+        createdAt = existing?.createdAt ?: System.currentTimeMillis()
     )
 
     Box(Modifier.fillMaxSize().background(Pal.Mist)) {

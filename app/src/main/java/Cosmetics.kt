@@ -10,8 +10,18 @@ package com.example.medtap.ui
  * L'ordre compte : c'est l'ordre dans lequel les pièces sont gagnées, une par journée
  * complète. Les premières devraient donc être les plus faciles à aimer.
  */
+/**
+ * [WINGS] n'est pas un emplacement comme les autres : les ailes existent déjà sur le
+ * dragon nu, donc une pièce d'aile REMPLACE une partie du corps au lieu de se poser
+ * dessus. C'est pour ça que `Dragon.wing` prend la pièce en paramètre plutôt que d'être
+ * suivie d'un dessin séparé.
+ *
+ * [FRIEND] n'est pas porté du tout : il est posé par terre à côté d'elle, hors du
+ * balancement, parce qu'une peluche qui respire au même rythme que le dragon se lit
+ * comme un bogue.
+ */
 enum class Slot(val label: String) {
-    HEAD("Tête"), BODY("Corps"), FEET("Pattes")
+    HEAD("Tête"), BODY("Corps"), FEET("Pattes"), WINGS("Ailes"), FRIEND("Compagnon")
 }
 
 data class Cosmetic(
@@ -59,8 +69,98 @@ object Cosmetics {
             name = "Le hoodie de Noël",
             slot = Slot.BODY,
             blurb = "Fourrure blanche au col, poche devant pour cacher des biscuits. Porté à l'année."
+        ),
+
+        // Les deux compagnons d'abord : ce sont les plus faciles à aimer, et l'ordre de
+        // cette liste est l'ordre dans lequel les pièces sont gagnées.
+        Cosmetic(
+            id = "peluche",
+            name = "La peluche",
+            slot = Slot.FRIEND,
+            blurb = "Un petit truc rose assis à côté d'elle. Il n'a pas de nom. Il n'en a pas besoin."
+        ),
+        Cosmetic(
+            id = "doudou",
+            name = "Le doudou",
+            slot = Slot.FRIEND,
+            blurb = "Bleu, râpé sur un coin, traîné partout. Le coin râpé, c'est le meilleur bout."
+        ),
+
+        Cosmetic(
+            id = "ailes_fee",
+            name = "Les ailes de fée",
+            slot = Slot.WINGS,
+            blurb = "Translucides, veinées de blanc. Elles ne servent absolument à rien et c'est parfait."
+        ),
+        Cosmetic(
+            id = "ailes_ange",
+            name = "Les ailes d'ange",
+            slot = Slot.WINGS,
+            blurb = "Blanches, en plumes. Framboise trouve que ça lui donne un genre. Elle a raison."
+        ),
+        Cosmetic(
+            id = "ailes_monarque",
+            name = "Les ailes de monarque",
+            slot = Slot.WINGS,
+            blurb = "Orange et noir, comme ceux qui traversent le fleuve à l'automne."
+        ),
+        Cosmetic(
+            id = "ailes_coccinelle",
+            name = "Les ailes de coccinelle",
+            slot = Slot.WINGS,
+            blurb = "Rouges à pois, deux fois trop petites. Elle décolle quand même. Un peu."
+        ),
+        Cosmetic(
+            id = "ailes_libellule",
+            name = "Les ailes de libellule",
+            slot = Slot.WINGS,
+            blurb = "Longues, fines, turquoise. Elles font un bruit de papier quand elle bouge."
+        ),
+        Cosmetic(
+            id = "ailes_givrees",
+            name = "Les ailes givrées",
+            slot = Slot.WINGS,
+            blurb = "Bleu glace, bordées de cristaux. Elles fondent un peu près du calorifère."
+        ),
+        Cosmetic(
+            id = "ailes_arcenciel",
+            name = "Les ailes arc-en-ciel",
+            slot = Slot.WINGS,
+            blurb = "Six bandes, aucune subtilité. C'est exactement l'idée."
+        ),
+        Cosmetic(
+            id = "ailes_braise",
+            name = "Les ailes de braise",
+            slot = Slot.WINGS,
+            blurb = "Rouge sombre qui vire à l'orange sur les bords. Elles ont l'air chaudes. Elles le sont."
+        ),
+        Cosmetic(
+            id = "ailes_dechirees",
+            name = "Les ailes déchirées",
+            slot = Slot.WINGS,
+            blurb = "Trouées, orange d'Halloween. Elle jure que c'était déjà comme ça en les achetant."
         )
     )
+
+    /** Combien de temps dure la cabine d'essayage. */
+    const val PREVIEW_MINUTES = 5L
+
+    /**
+     * Le mot qui ouvre tout le casier pour cinq minutes.
+     *
+     * La comparaison enlève les accents, les apostrophes, les espaces et la casse : un mot
+     * de passe qu'il faut taper au caractère près est un mot de passe qui ne marche pas,
+     * et l'apostrophe de « t'aime » sort courbe sur la moitié des claviers.
+     *
+     * Ça ne donne rien de permanent. Les pièces se gagnent une par journée complète, et
+     * c'est ce qui leur donne leur valeur — si le mot les offrait pour de bon, le casier
+     * n'aurait plus aucune raison d'être ouvert le lendemain.
+     */
+    fun isPreviewCode(input: String): Boolean = flatten(input) == flatten("Je t'aime")
+
+    private fun flatten(s: String): String =
+        java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("[^a-z]"), "")
 
     fun byId(id: String): Cosmetic? = ALL.firstOrNull { it.id == id }
 

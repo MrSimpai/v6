@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Les fonds d'icône, alignés sur l'échelle de NotifArt.Vibe.
+
+     L'icône, la tuile et la bannière montent le même escalier de couleurs, donc un coup
+     d'œil à l'écran d'accueil suffit : c'est bleu, c'est l'heure ; c'est magenta, ça
+     traîne ; c'est bordeaux, ça fait deux heures. Ces valeurs sont un cran plus claires
+     que celles de `NotifArt.skin` — une icône fait le quart d'une tuile, et les couleurs
+     très sombres s'y lisent comme une tache noire. -->
 <resources>
-    <!-- Fonds d'icône, repris de l'illustration : le sarcelle est celui de la référence. -->
-    <color name="icbg_calm">#94C9CF</color>
+    <color name="icbg_calm">#4EBE8A</color>
+    <color name="icbg_waiting">#2F8FD8</color>
+    <color name="icbg_late">#B93A8E</color>
+    <color name="icbg_overdue">#C0392B</color>
     <color name="icbg_happy">#9BD6C0</color>
-    <color name="icbg_overdue">#CE7A72</color>
-    <color name="icbg_waiting">#F3C6A0</color>
 </resources>

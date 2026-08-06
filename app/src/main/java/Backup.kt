@@ -18,7 +18,8 @@ import org.json.JSONObject
  */
 object Backup {
 
-    private const val VERSION = 1
+    /** 2 ajoute `createdAt` aux médicaments. Les fichiers de version 1 se relisent tels quels. */
+    private const val VERSION = 2
 
     suspend fun export(ctx: Context, uri: Uri) {
         val dao = Db.get(ctx).dao()
@@ -32,6 +33,7 @@ object Backup {
                     put("tagId", m.tagId); put("name", m.name); put("doseText", m.doseText)
                     put("hourOfDay", m.hourOfDay); put("minute", m.minute)
                     put("nagEveryMinutes", m.nagEveryMinutes); put("active", m.active)
+                    put("createdAt", m.createdAt)
                 })
             }
         })
@@ -88,7 +90,11 @@ object Backup {
                         doseText = o.getString("doseText"),
                         hourOfDay = o.getInt("hourOfDay"), minute = o.getInt("minute"),
                         nagEveryMinutes = o.optInt("nagEveryMinutes", 10),
-                        active = o.optBoolean("active", true)
+                        active = o.optBoolean("active", true),
+                        // Une sauvegarde d'avant la version 4 n'a pas ce champ. Zéro,
+                        // « a toujours existé », restaure la série telle qu'elle était :
+                        // l'heure d'aujourd'hui la ramènerait à un.
+                        createdAt = o.optLong("createdAt", 0L)
                     )
                 )
                 n++

@@ -29,14 +29,22 @@ data class DayPoint(val label: String, val slot: Long, val log: DoseLog?)
 fun buildDays(med: Medication, logs: List<DoseLog>, days: Int = 14): List<DayPoint> {
     // Les doses sautées comptent pour la série mais pas pour le graphique de dérive :
     // tracer une heure de prise pour une dose jamais prise inventerait une donnée.
-    val bySlot = logs.filter { it.tagId == med.tagId && !it.skipped }.associateBy { it.scheduledFor }
+    // Rangées par journée et non par horodatage de créneau : une dose garde l'heure
+    // qu'avait le médicament le jour où elle a été prise, et changer l'heure du rappel
+    // effacerait sinon toute la courbe d'un coup.
+    val byDay = logs.filter { it.tagId == med.tagId && !it.skipped }
+        .associateBy { Slots.dayOf(it.scheduledFor) }
     val today = Slots.todayAt(med)
     val names = arrayOf("D", "L", "M", "M", "J", "V", "S")
     return (days - 1 downTo 0).map { back ->
         val c = Calendar.getInstance().apply {
             timeInMillis = today; add(Calendar.DAY_OF_YEAR, -back)
         }
-        DayPoint(names[c.get(Calendar.DAY_OF_WEEK) - 1], c.timeInMillis, bySlot[c.timeInMillis])
+        DayPoint(
+            names[c.get(Calendar.DAY_OF_WEEK) - 1],
+            c.timeInMillis,
+            byDay[Slots.dayOf(c.timeInMillis)]
+        )
     }
 }
 

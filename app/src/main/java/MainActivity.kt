@@ -62,6 +62,10 @@ class MainActivity : ComponentActivity() {
         nfc = NfcAdapter.getDefaultAdapter(this)
         state.value = state.value.copy(hasNfc = nfc != null)
         Reminders.ensureChannels(this)
+        // Le bilan hebdomadaire est une alarme inexacte : elle ne survit ni au
+        // redémarrage ni à une mise à jour, donc on la réarme à chaque ouverture. Poser
+        // deux fois la même alarme la remplace, ça ne l'empile pas.
+        Reminders.scheduleRecap(this)
         requestNotificationAccess()
         observeDatabase()
 
@@ -79,13 +83,25 @@ class MainActivity : ComponentActivity() {
                 // Trois pages : le casier à gauche, l'accueil au centre, les réglages à
                 // droite. L'accueil ne répond qu'à une question — ai-je pris ma pilule —
                 // et tout ce qui n'y répond pas a été déplacé de part et d'autre.
+                // La cabine d'essayage se referme d'elle-même. Une attente unique jusqu'à
+                // l'échéance plutôt qu'un sondage : l'effet est relancé quand la date
+                // change, et annulé si elle disparaît.
+                val previewUntil = state.value.previewUntil
+                LaunchedEffect(previewUntil) {
+                    if (previewUntil == null) return@LaunchedEffect
+                    delay((previewUntil - System.currentTimeMillis()).coerceAtLeast(0L))
+                    state.value = state.value.copy(previewUntil = null, previewWorn = emptySet())
+                }
+
                 val pager = rememberPagerState(initialPage = 1) { 3 }
                 HorizontalPager(state = pager, modifier = androidx.compose.ui.Modifier.fillMaxSize()) { page ->
                     when (page) {
                         0 -> LockerScreen(
                             owned = state.value.owned,
-                            worn = state.value.worn,
-                            onToggle = { id -> toggleCosmetic(id) }
+                            worn = state.value.dressed,
+                            previewUntil = state.value.previewUntil,
+                            onToggle = { id -> toggleCosmetic(id) },
+                            onCode = { startPreview(it) }
                         )
                         2 -> SettingsScreen(
                             batteryRestricted = state.value.batteryRestricted,
@@ -181,9 +197,10 @@ class MainActivity : ComponentActivity() {
      */
     private fun logDose(med: Medication) = lifecycleScope.launch(Dispatchers.IO) {
         val dao = Db.get(this@MainActivity).dao()
-        if (!Slots.canLogNow(med)) return@launch      // too early to count for today
-        val slot = Slots.todayAt(med)
-        if (dao.logForSlot(med.tagId, slot) != null) return@launch   // already logged today
+        // Le créneau que cette prise remplit : celui d'aujourd'hui d'habitude, celui
+        // d'hier soir si on est dans les heures qui suivent minuit. Null s'il n'y a rien
+        // à noter — trop tôt, ou déjà fait.
+        val slot = dao.slotToLog(med) ?: return@launch
         dao.insert(DoseLog(tagId = med.tagId, scheduledFor = slot, takenAt = System.currentTimeMillis()))
         Reminders.resolve(this@MainActivity, med, slot)
 
@@ -245,19 +262,50 @@ class MainActivity : ComponentActivity() {
      * qui occupait la place -- c'est ce qu'on attend d'une garde-robe, et ça évite un
      * message d'erreur pour un problème que l'app peut régler toute seule.
      */
-    private fun toggleCosmetic(id: String) = lifecycleScope.launch(Dispatchers.IO) {
-        val dao = Db.get(this@MainActivity).dao()
-        val owned = dao.cosmeticsOnce()
-        val current = owned.firstOrNull { it.id == id } ?: return@launch
-        val slot = Cosmetics.byId(id)?.slot ?: return@launch
+    /**
+     * Ouvre la cabine d'essayage si le mot est le bon.
+     *
+     * La tenue de départ est celle qu'elle porte vraiment, pour que l'essayage commence
+     * là où elle en est plutôt que sur un dragon nu.
+     */
+    private fun startPreview(code: String): Boolean {
+        if (!Cosmetics.isPreviewCode(code)) return false
+        state.value = state.value.copy(
+            previewUntil = System.currentTimeMillis() + Cosmetics.PREVIEW_MINUTES * 60_000L,
+            previewWorn = state.value.worn
+        )
+        return true
+    }
 
-        if (current.equipped) {
-            dao.setEquipped(id, false)
-            return@launch
+    private fun toggleCosmetic(id: String) {
+        val slot = Cosmetics.byId(id)?.slot ?: return
+
+        // Pendant l'essayage, rien ne descend jusqu'à la base — ni ce qu'on enfile, ni ce
+        // qu'on retire. C'est ce qui permet d'ouvrir tout le casier sans rien offrir : à
+        // l'expiration, la vraie tenue est encore exactement là où elle était.
+        if (state.value.previewUntil != null) {
+            val cur = state.value.previewWorn
+            state.value = state.value.copy(
+                previewWorn =
+                    if (id in cur) cur - id
+                    else cur.filterNot { Cosmetics.byId(it)?.slot == slot }.toSet() + id
+            )
+            return
         }
-        owned.filter { it.equipped && Cosmetics.byId(it.id)?.slot == slot }
-            .forEach { dao.setEquipped(it.id, false) }
-        dao.setEquipped(id, true)
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val dao = Db.get(this@MainActivity).dao()
+            val owned = dao.cosmeticsOnce()
+            val current = owned.firstOrNull { it.id == id } ?: return@launch
+
+            if (current.equipped) {
+                dao.setEquipped(id, false)
+                return@launch
+            }
+            owned.filter { it.equipped && Cosmetics.byId(it.id)?.slot == slot }
+                .forEach { dao.setEquipped(it.id, false) }
+            dao.setEquipped(id, true)
+        }
     }
 
     /**
@@ -398,15 +446,18 @@ class MainActivity : ComponentActivity() {
             ) { meds, logs, cosmetics -> Triple(meds, logs, cosmetics) }
                 .collect { (meds, logs, cosmetics) ->
                     meds.forEach { Reminders.scheduleNext(this@MainActivity, it) }
-                    Reminders.scheduleLastCall(this@MainActivity)
                     state.value = state.value.copy(
                         meds = meds,
                         logs = logs,
-                        takenSlots = logs.map { it.tagId to it.scheduledFor }.toSet(),
+                        takenDays = logs.map { it.tagId to Slots.dayOf(it.scheduledFor) }.toSet(),
                         week = dao.weekStatus(meds),
                         owned = cosmetics.map { it.id }.toSet(),
                         worn = cosmetics.filter { it.equipped }.map { it.id }.toSet(),
-                        batteryRestricted = !ReminderHealth.batteryUnrestricted(this@MainActivity)
+                        batteryRestricted = !ReminderHealth.batteryUnrestricted(this@MainActivity),
+                        // Combien de fois, cette semaine, un rappel n'est pas parti du
+                        // tout. Recalculé à chaque changement de données, donc noter la
+                        // dose manquante fait disparaître l'avertissement tout seul.
+                        silentMisses = dao.silentMisses(meds)
                     )
                     DragonWidget.refresh(this@MainActivity)
                 }

@@ -3,7 +3,6 @@ package com.example.medtap.reminder
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
-import com.example.medtap.ui.Mood
 
 /**
  * Android can't repaint a launcher icon at runtime, but it can swap which
@@ -25,19 +24,29 @@ import com.example.medtap.ui.Mood
  */
 object IconSwitcher {
 
+    /**
+     * L'icône monte la même échelle que la tuile et que la bannière — c'est le principe
+     * de Duolingo, où l'icône elle-même vire quand la série est en jeu. Quatre marches
+     * seulement : un changement d'icône coûte un redessin du lanceur, donc il ne suit pas
+     * les huit ambiances, il suit le fait qu'il y ait quelque chose à faire et depuis
+     * combien de temps.
+     */
     private val aliases = mapOf(
-        Mood.Sleeping to ".Calm",
-        Mood.Cheering to ".Calm",       // dose prise : plus rien n'est dû, donc calme
-        Mood.Waiting  to ".Waiting",
-        Mood.Sad      to ".Waiting",    // 1 h de retard : toujours « dose à prendre »
-        Mood.Overdue  to ".Overdue"
+        NotifArt.Vibe.REST_DAY   to ".Calm",
+        NotifArt.Vibe.REST_NIGHT to ".Calm",
+        NotifArt.Vibe.WIN        to ".Calm",   // dose prise : plus rien n'est dû
+        NotifArt.Vibe.DUE        to ".Waiting",
+        NotifArt.Vibe.NUDGE      to ".Waiting",
+        NotifArt.Vibe.SULK       to ".Late",
+        NotifArt.Vibe.DRAMA      to ".Late",
+        NotifArt.Vibe.ANGRY      to ".Overdue"
     )
 
     /** Every alias we own, including the retired ".Happy", so a stale one gets cleared. */
-    private val allAliases = listOf(".Calm", ".Waiting", ".Overdue", ".Happy")
+    private val allAliases = listOf(".Calm", ".Waiting", ".Late", ".Overdue", ".Happy")
 
-    fun apply(ctx: Context, mood: Mood) {
-        val want = aliases[mood] ?: return
+    fun apply(ctx: Context, vibe: NotifArt.Vibe) {
+        val want = aliases[vibe] ?: return
         val pm = ctx.packageManager
         val pkg = ctx.packageName
         val wanted = ComponentName(pkg, pkg + want)

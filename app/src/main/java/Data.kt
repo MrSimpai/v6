@@ -22,7 +22,19 @@ data class Medication(
     val hourOfDay: Int,
     val minute: Int,
     val nagEveryMinutes: Int = 10,      // how often the reminder re-announces itself
-    val active: Boolean = true
+    val active: Boolean = true,
+    /**
+     * Le jour où ce médicament est entré dans l'app.
+     *
+     * Sans lui, la série exigeait une dose de CHAQUE médicament actif pour CHAQUE jour
+     * passé — y compris les jours d'avant sa création, où il n'y avait évidemment rien à
+     * prendre. Ajouter un deuxième médicament remettait donc la série à un et vidait la
+     * semaine d'un coup. Personne ne pouvait deviner pourquoi.
+     *
+     * Les lignes existantes reçoivent 0 à la migration, c'est-à-dire « a toujours
+     * existé » : le comportement des médicaments déjà là ne change pas d'un iota.
+     */
+    val createdAt: Long = System.currentTimeMillis()
 ) {
     companion object {
         const val MANUAL_PREFIX = "MANUAL-"
@@ -75,8 +87,22 @@ interface MedDao {
     @Query("SELECT * FROM DoseLog")
     suspend fun allLogs(): List<DoseLog>
 
-    @Query("SELECT * FROM DoseLog WHERE tagId = :tagId AND scheduledFor = :slot LIMIT 1")
-    suspend fun logForSlot(tagId: String, slot: Long): DoseLog?
+    /**
+     * La dose de ce médicament pour CE JOUR-LÀ, quelle que soit l'heure inscrite dessus.
+     *
+     * Passer par les bornes du jour plutôt que par l'horodatage exact du créneau : un
+     * `DoseLog` garde l'heure qu'avait le médicament au moment de la prise, alors que
+     * [Slots.slotDaysAgo] recalcule celle qu'il a maintenant. Déplacer un rappel de cinq
+     * minutes suffisait donc à rendre invisible tout l'historique du médicament — série,
+     * semaine et graphique d'un coup — parce que plus aucune recherche ne tombait sur la
+     * bonne milliseconde. Un médicament n'a qu'un créneau par jour, donc « ce jour-là »
+     * désigne toujours une dose et une seule.
+     */
+    @Query(
+        "SELECT * FROM DoseLog WHERE tagId = :tagId " +
+            "AND scheduledFor >= :dayStart AND scheduledFor < :dayEnd LIMIT 1"
+    )
+    suspend fun logInDay(tagId: String, dayStart: Long, dayEnd: Long): DoseLog?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(log: DoseLog): Long
@@ -113,6 +139,16 @@ interface MedDao {
 
     @Query("SELECT * FROM StreakFreeze")
     suspend fun allFreezes(): List<StreakFreeze>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun recordPost(p: ReminderPost)
+
+    @Query("SELECT * FROM ReminderPost WHERE slot >= :since")
+    suspend fun postsSince(since: Long): List<ReminderPost>
+
+    /** La table ne sert qu'à regarder la semaine écoulée : le reste ne vaut pas d'être gardé. */
+    @Query("DELETE FROM ReminderPost WHERE slot < :before")
+    suspend fun prunePosts(before: Long)
 }
 
 /** Une pièce cosmétique gagnée. La table ne grandit jamais que d'une ligne par jour. */
@@ -130,12 +166,59 @@ data class StreakFreeze(
     val usedAt: Long
 )
 
+/**
+ * La trace qu'un rappel a bel et bien été posé pour ce créneau.
+ *
+ * Le mode de panne qui compte vraiment pour une app de médication n'est pas un mauvais
+ * texte, c'est le silence : One UI met l'app en veille, les alarmes ne partent jamais, et
+ * personne ne s'en aperçoit — surtout pas celle qui a arrêté de vérifier elle-même parce
+ * qu'elle fait confiance à l'app. Une app qui échoue sans le dire est pire que pas d'app.
+ *
+ * [ReminderHealth] savait détecter que la batterie est bridée, c'est-à-dire un risque.
+ * Ceci détecte une panne réelle : le créneau est passé, aucun rappel n'a été posé, aucune
+ * dose n'a été notée.
+ */
+@Entity(primaryKeys = ["tagId", "slot"])
+data class ReminderPost(
+    val tagId: String,
+    val slot: Long,
+    val postedAt: Long
+)
+
 @Entity
 data class OwnedCosmetic(
     @PrimaryKey val id: String,
     val unlockedAt: Long,
     val equipped: Boolean = true
 )
+
+/**
+ * La dose qui satisfait [slot], cherchée par journée et non à la milliseconde.
+ *
+ * Extension plutôt que méthode du DAO pour que les appelants continuent de raisonner en
+ * créneaux — c'est bien la question qu'ils posent — sans avoir à calculer des bornes de
+ * jour chacun de leur côté.
+ */
+suspend fun MedDao.logForSlot(tagId: String, slot: Long): DoseLog? {
+    val start = Slots.dayOf(slot)
+    return logInDay(tagId, start, Slots.dayAfter(start))
+}
+
+/**
+ * Les médicaments dont une dose était réellement attendue le jour commençant à [dayStart].
+ *
+ * La granularité est la JOURNÉE et non l'heure du créneau. Compter à l'heure près serait
+ * plus juste sur le papier — « tu n'es responsable que des doses dont l'heure est passée
+ * après que tu l'aies ajouté » — mais ça rendrait la journée d'installation gratuite pour
+ * tout le monde qui installe l'app le soir avec une pilule du matin, c'est-à-dire presque
+ * tout le monde. Or c'est justement le jour un, celui qu'on veut voir compter.
+ *
+ * Le prix : ajouter un médicament à 23h50 alors que son heure était 9h rend la journée
+ * incomplète le soir même. Il reste enregistrable dans l'instant ([Slots.loggableSlots]
+ * ouvre deux heures avant et ne referme pas), et le gel hebdomadaire couvre l'oubli.
+ */
+private fun List<Medication>.dueOn(dayStart: Long): List<Medication> =
+    filter { Slots.dayOf(it.createdAt) <= dayStart }
 
 /** L'état d'une journée dans la semaine affichée. */
 enum class DayState { DONE, FROZEN, TODAY, MISSED, FUTURE }
@@ -147,17 +230,28 @@ enum class DayState { DONE, FROZEN, TODAY, MISSED, FUTURE }
  * seule vue qui répond honnêtement à « est-ce que ça va en ce moment », et l'ordre fixe
  * compte : des points qui glissent chaque jour obligeraient à les relire à chaque fois.
  */
-suspend fun MedDao.weekStatus(meds: List<Medication>): List<DayState> {
+suspend fun MedDao.weekStatus(
+    meds: List<Medication>,
+    now: Long = System.currentTimeMillis()
+): List<DayState> {
     // DAY_OF_WEEK vaut 1 pour dimanche : ce décalage remet lundi en tête.
-    val todayIdx = (Calendar.getInstance().get(Calendar.DAY_OF_WEEK) + 5) % 7
+    val todayIdx = (Calendar.getInstance().apply { timeInMillis = now }
+        .get(Calendar.DAY_OF_WEEK) + 5) % 7
     val frozen = freezeDays().toSet()
     return (0..6).map { i ->
         val back = todayIdx - i
+        if (back < 0) return@map DayState.FUTURE
+
+        val dayStart = Slots.dayStart(back, now)
+        val due = meds.dueOn(dayStart)
         when {
-            back < 0 -> DayState.FUTURE
-            meds.isNotEmpty() &&
-                meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, back)) != null } -> DayState.DONE
-            Slots.dayStart(back) in frozen -> DayState.FROZEN
+            // Un jour d'avant le premier médicament n'a rien manqué : il n'était rien
+            // attendu de lui. FUTURE plutôt que MISSED — c'est le même point à peine
+            // visible, et c'est la même chose à dire.
+            due.isEmpty() -> DayState.FUTURE
+            due.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, back, now)) != null } ->
+                DayState.DONE
+            dayStart in frozen -> DayState.FROZEN
             back == 0 -> DayState.TODAY
             else -> DayState.MISSED
         }
@@ -168,14 +262,30 @@ suspend fun MedDao.weekStatus(meds: List<Medication>): List<DayState> {
  * Consecutive days ending today where EVERY medication was logged. Lives here rather than
  * in the activity because both the UI and the reminder receiver need the same number, and
  * two copies of a streak calculation is two chances to disagree about what day it is.
+ *
+ * Chaque jour n'est jugé que sur les médicaments qui existaient ce jour-là. Sans ce
+ * filtre, ajouter un deuxième médicament remettait la série à un : le nouveau n'avait
+ * aucune dose enregistrée hier, donc hier cessait d'être une journée complète, et toute
+ * l'histoire d'avant devenait inatteignable.
+ *
+ * Le compte s'arrête au premier jour où plus aucun médicament n'existait — sinon la
+ * boucle traverserait vacuement les dix ans qui précèdent l'installation et rapporterait
+ * une série de 3650 jours.
  */
-suspend fun MedDao.perfectDayStreak(meds: List<Medication>, from: Int = 0): Int {
+suspend fun MedDao.perfectDayStreak(
+    meds: List<Medication>,
+    from: Int = 0,
+    now: Long = System.currentTimeMillis()
+): Int {
     if (meds.isEmpty()) return 0
     val frozen = freezeDays().toSet()
     var n = from
     while (n < 3650) {
-        val done = meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, n)) != null }
-        if (!done && Slots.dayStart(n) !in frozen) return n - from
+        val dayStart = Slots.dayStart(n, now)
+        val due = meds.dueOn(dayStart)
+        if (due.isEmpty()) return n - from
+        val done = due.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, n, now)) != null }
+        if (!done && dayStart !in frozen) return n - from
         n++
     }
     return n - from
@@ -188,10 +298,13 @@ suspend fun MedDao.perfectDayStreak(meds: List<Medication>, from: Int = 0): Int 
  * Sans ça le compteur du widget tomberait à zéro chaque matin et remonterait le soir, ce
  * qui donnerait l'impression de tout perdre toutes les nuits.
  */
-suspend fun MedDao.currentStreak(meds: List<Medication>): Int {
+suspend fun MedDao.currentStreak(
+    meds: List<Medication>,
+    now: Long = System.currentTimeMillis()
+): Int {
     if (meds.isEmpty()) return 0
-    val todayDone = meds.all { logForSlot(it.tagId, Slots.todayAt(it)) != null }
-    return if (todayDone) perfectDayStreak(meds) else perfectDayStreak(meds, from = 1)
+    val todayDone = meds.all { logForSlot(it.tagId, Slots.todayAt(it, now)) != null }
+    return if (todayDone) perfectDayStreak(meds, 0, now) else perfectDayStreak(meds, 1, now)
 }
 
 /**
@@ -205,12 +318,20 @@ suspend fun MedDao.useFreezeIfNeeded(): Boolean {
     val meds = activeMedsOnce()
     if (meds.isEmpty()) return false
 
+    // Sur la même base que la série : un médicament ajouté aujourd'hui n'a pas « manqué »
+    // hier, et ne doit donc pas déclencher un gel — il n'y a rien à protéger.
     val yesterday = Slots.dayStart(1)
     if (freezeFor(yesterday) != null) return false
-    if (meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 1)) != null }) return false
+    val dueYesterday = meds.dueOn(yesterday)
+    if (dueYesterday.isEmpty()) return false
+    if (dueYesterday.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 1)) != null }) return false
 
-    val hadStreak = meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 2)) != null } ||
-        Slots.dayStart(2) in freezeDays().toSet()
+    val dayBefore = Slots.dayStart(2)
+    val dueBefore = meds.dueOn(dayBefore)
+    val hadStreak =
+        (dueBefore.isNotEmpty() &&
+            dueBefore.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 2)) != null }) ||
+            dayBefore in freezeDays().toSet()
     if (!hadStreak) return false
 
     val week = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
@@ -223,6 +344,48 @@ suspend fun MedDao.useFreezeIfNeeded(): Boolean {
 /** Medications whose dose for today has not been logged yet. */
 suspend fun MedDao.outstandingToday(meds: List<Medication>): List<Medication> =
     meds.filter { logForSlot(it.tagId, Slots.todayAt(it)) == null }
+
+/**
+ * Combien de fois, ces [days] derniers jours, l'app a échoué EN SILENCE : le créneau est
+ * passé, aucun rappel n'a été posé, et aucune dose n'a été notée.
+ *
+ * Les trois conditions comptent. Sans la dernière, prendre sa dose en avance — auquel cas
+ * le rappel est annulé avant d'avoir servi — serait signalé comme une panne. Sans
+ * [dueOn], un médicament ajouté mardi serait reproché pour le lundi.
+ *
+ * On ne regarde que les journées terminées. Le créneau d'aujourd'hui vient peut-être de
+ * passer et son alarme est peut-être en train de partir : le compter serait une course
+ * perdue d'avance contre l'horloge.
+ */
+suspend fun MedDao.silentMisses(
+    meds: List<Medication>,
+    days: Int = 7,
+    now: Long = System.currentTimeMillis()
+): Int {
+    if (meds.isEmpty()) return 0
+    val told = postsSince(Slots.dayStart(days, now))
+        .map { it.tagId to Slots.dayOf(it.slot) }
+        .toSet()
+
+    var n = 0
+    for (back in 1..days) {
+        val dayStart = Slots.dayStart(back, now)
+        for (med in meds.dueOn(dayStart)) {
+            val slot = Slots.slotDaysAgo(med, back, now)
+            if ((med.tagId to Slots.dayOf(slot)) in told) continue
+            if (logForSlot(med.tagId, slot) != null) continue
+            n++
+        }
+    }
+    return n
+}
+
+/**
+ * Le créneau qu'une prise notée maintenant vient remplir, ou `null` s'il n'y a rien à
+ * noter. Le premier candidat de [Slots.loggableSlots] qui n'a pas déjà sa dose.
+ */
+suspend fun MedDao.slotToLog(med: Medication, now: Long = System.currentTimeMillis()): Long? =
+    Slots.loggableSlots(med, now).firstOrNull { logForSlot(med.tagId, it) == null }
 
 /**
  * Version 2 ajoute la table des cosmétiques. La migration crée simplement la nouvelle
@@ -253,9 +416,41 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/**
+ * Version 4 : la date de création d'un médicament, pour que la série cesse de lui
+ * reprocher les jours d'avant son existence.
+ *
+ * La valeur par défaut est 0 — « a toujours existé ». C'est délibérément le choix qui ne
+ * change rien : les médicaments déjà en place gardent exactement la série et la semaine
+ * qu'ils avaient avant la mise à jour. Mettre `System.currentTimeMillis()` ici aurait
+ * remis tout l'historique existant à zéro, ce qui est précisément le bogue qu'on répare.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE Medication ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/**
+ * Version 5 : la trace des rappels réellement posés, pour pouvoir constater une panne
+ * silencieuse plutôt que de seulement soupçonner un risque.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS ReminderPost (" +
+                "tagId TEXT NOT NULL, slot INTEGER NOT NULL, postedAt INTEGER NOT NULL, " +
+                "PRIMARY KEY(tagId, slot))"
+        )
+    }
+}
+
 @Database(
-    entities = [Medication::class, DoseLog::class, OwnedCosmetic::class, StreakFreeze::class],
-    version = 3, exportSchema = false
+    entities = [
+        Medication::class, DoseLog::class, OwnedCosmetic::class,
+        StreakFreeze::class, ReminderPost::class
+    ],
+    version = 5, exportSchema = false
 )
 abstract class Db : RoomDatabase() {
     abstract fun dao(): MedDao
@@ -264,7 +459,7 @@ abstract class Db : RoomDatabase() {
         @Volatile private var instance: Db? = null
         fun get(ctx: Context): Db = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "medtap.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build().also { instance = it }
         }
     }
@@ -321,7 +516,54 @@ object Slots {
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
 
-    /** True once the dose is due, or within [EARLY_WINDOW] of being due. */
-    fun canLogNow(med: Medication, now: Long = System.currentTimeMillis()): Boolean =
-        now >= todayAt(med, now) - EARLY_WINDOW
+    /** Minuit du jour auquel appartient [t], heure locale. */
+    fun dayOf(t: Long): Long = Calendar.getInstance().apply {
+        timeInMillis = t
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    /**
+     * Minuit du lendemain de [dayStart]. Passe par le calendrier et non par
+     * `+ 86_400_000` : aux deux changements d'heure la journée fait 23 ou 25 heures, et
+     * la borne tomberait une heure à côté.
+     */
+    fun dayAfter(dayStart: Long): Long = Calendar.getInstance().apply {
+        timeInMillis = dayStart
+        add(Calendar.DAY_OF_YEAR, 1)
+    }.timeInMillis
+
+    /**
+     * Jusqu'à quand, après son heure, un créneau d'hier soir reste enregistrable.
+     *
+     * Six heures : une pilule de 21h prise à 0h30 est manifestement la pilule d'hier, une
+     * pilule de 9h « prise » le lendemain à 1h du matin ne l'est plus, c'est une journée
+     * manquée qu'on maquillerait. La borne tombe entre les deux.
+     */
+    const val LATE_WINDOW = 6 * 60 * 60 * 1000L
+
+    /**
+     * Les créneaux qu'une prise faite maintenant peut satisfaire, du plus probable au
+     * moins probable. Vide s'il n'y a rien à noter à cette heure-ci.
+     *
+     * Le deuxième cas est la raison d'être de cette fonction. [todayAt] résout toujours
+     * vers la journée civile en cours — c'est délibéré et il ne faut pas y toucher, voir
+     * plus haut — donc à 0h30 le créneau de 21h désignait ce soir, dans vingt heures, et
+     * la dose qu'elle avait littéralement dans la main était impossible à enregistrer. Le
+     * bouton était grisé, la journée d'hier restait manquée, et la série tombait.
+     *
+     * C'est une fonction pure, sans base de données, parce que trois appelants doivent
+     * répondre à la même question avec des données différentes — l'écran a la liste des
+     * jours déjà notés, le reste a le DAO. Ce qui ne doit pas diverger, c'est la règle ;
+     * chacun vérifie ensuite lui-même ce qui est déjà enregistré.
+     */
+    fun loggableSlots(med: Medication, now: Long = System.currentTimeMillis()): List<Long> {
+        val out = mutableListOf<Long>()
+        val today = todayAt(med, now)
+        if (now >= today - EARLY_WINDOW) out += today
+        val yesterday = slotDaysAgo(med, 1, now)
+        if (now - yesterday in 0..LATE_WINDOW) out += yesterday
+        return out
+    }
+
 }

@@ -45,6 +45,32 @@ object Dragon {
     const val NightDim = 0xFF44528A.toInt()
     const val Fluff    = 0xFFF3C6D5.toInt()   // pantoufles
 
+    // Ailes. Aucune n'utilise de dégradé : un `Shader` écraserait la couleur et
+    // court-circuiterait le mode ombre chinoise du casier, où la pièce doit rester une
+    // silhouette. Les fondus sont donc faits en bandes de couleurs pleines.
+    const val Feather  = 0xFFFDFBF6.toInt()   // ange
+    const val FeatherD = 0xFFDCD3C8.toInt()
+    const val Fairy    = 0xFFF7DCEE.toInt()   // fée
+    const val FairyRim = 0xFFFFFFFF.toInt()
+    const val Frost    = 0xFFCDE9F5.toInt()   // givrées
+    const val FrostD   = 0xFF74B6D6.toInt()
+    const val Ember    = 0xFF7A1B12.toInt()   // braise
+    const val EmberMid = 0xFFD9452F.toInt()
+    const val EmberHot = 0xFFFFB65C.toInt()
+    const val Rot      = 0xFFE8802B.toInt()   // déchirées
+    const val RotDeep  = 0xFF8A3E12.toInt()
+    const val Odo      = 0xFF8FDCD6.toInt()   // libellule
+    const val OdoRim   = 0xFF3E8F92.toInt()
+    const val Monarch  = 0xFFE8802B.toInt()   // monarque
+    const val Beetle   = 0xFFD2382B.toInt()   // coccinelle
+    const val Chitin   = 0xFF2A1A16.toInt()   // nervures et pois
+
+    // Compagnons
+    const val Plush    = 0xFFF2A9C4.toInt()
+    const val PlushD   = 0xFFD17C9B.toInt()
+    const val Quilt    = 0xFFAFD4E8.toInt()
+    const val QuiltDim = 0xFF7FAECB.toInt()
+
     // Ancien nom conservé pour compatibilité avec le code qui l'utilisait.
     const val Crest    = Blush
 
@@ -119,9 +145,10 @@ object Dragon {
         val slots = worn.mapNotNull { Cosmetics.byId(it) }.associate { it.slot to it.id }
         val feet = slots[Slot.FEET]
         val body = slots[Slot.BODY]
+        val wings = slots[Slot.WINGS]
 
         tail(c)
-        wing(c, flap); mirrored(c) { wing(c, flap) }
+        wing(c, flap, wings); mirrored(c) { wing(c, flap, wings) }
         leg(c, feet); mirrored(c) { leg(c, feet) }
         torso(c, body)
         arm(c, body); mirrored(c) { arm(c, body) }
@@ -132,6 +159,10 @@ object Dragon {
             "couronne" -> couronne(c)
         }
         c.restore()
+        // Le compagnon est dessiné APRÈS le `restore` du balancement : il est posé par
+        // terre, pas porté. Le faire monter et descendre au rythme du dragon donnerait
+        // l'impression qu'il lévite.
+        friend(c, slots[Slot.FRIEND])
         extras(c, mood)
         c.restore()
     }
@@ -150,25 +181,237 @@ object Dragon {
         }.also { c.drawPath(it, fill(Pink)) }
     }
 
-    /** Aile de chauve-souris : bord d'attaque courbe, trois festons, trois phalanges. */
-    private fun wing(c: Canvas, lift: Float) {
+    /**
+     * L'aile, nue ou remplacée par une pièce.
+     *
+     * Contrairement au chapeau ou aux bottes, une aile ne se POSE pas sur le dragon : elle
+     * prend la place d'un morceau qui existe déjà. D'où le paramètre plutôt qu'un appel
+     * séparé après coup — sinon les deux paires se superposeraient.
+     */
+    private fun wing(c: Canvas, lift: Float, wear: String?) {
         c.save()
         c.rotate(lift * 6f, 88f, 118f)      // le battement, pivot à l'épaule
-        Path().apply {
-            moveTo(86f, 116f)
-            cubicTo(72f, 86f, 40f, 68f, 12f, 82f)
-            quadTo(24f, 102f, 42f, 109f)
-            quadTo(28f, 119f, 46f, 129f)
-            quadTo(36f, 141f, 56f, 148f)
-            quadTo(80f, 142f, 90f, 120f)
-            close()
-        }.also { c.drawPath(it, fill(WingMem)) }
+        when (wear) {
+            "ailes_arcenciel"  -> rainbowWing(c)
+            "ailes_braise"     -> emberWing(c)
+            "ailes_givrees"    -> frostWing(c)
+            "ailes_dechirees"  -> tatteredWing(c)
+            "ailes_ange"       -> angelWing(c)
+            "ailes_fee"        -> fairyWing(c)
+            "ailes_libellule"  -> dragonflyWing(c)
+            "ailes_monarque"   -> butterflyWing(c)
+            "ailes_coccinelle" -> ladybugWing(c)
+            else -> { c.drawPath(batPath(), fill(WingMem)); batBones(c, PinkDark) }
+        }
+        c.restore()
+    }
 
-        val bone = stroke(PinkDark, 3.2f)
+    /** Le contour de l'aile nue : bord d'attaque courbe, trois festons. */
+    private fun batPath() = Path().apply {
+        moveTo(86f, 116f)
+        cubicTo(72f, 86f, 40f, 68f, 12f, 82f)
+        quadTo(24f, 102f, 42f, 109f)
+        quadTo(28f, 119f, 46f, 129f)
+        quadTo(36f, 141f, 56f, 148f)
+        quadTo(80f, 142f, 90f, 120f)
+        close()
+    }
+
+    /** Les trois phalanges, en éventail depuis l'épaule. */
+    private fun batBones(c: Canvas, color: Int) {
+        val bone = stroke(color, 3.2f)
         c.drawLine(86f, 118f, 16f, 84f, bone)
         c.drawLine(86f, 118f, 43f, 108f, bone)
         c.drawLine(86f, 118f, 47f, 128f, bone)
-        c.restore()
+    }
+
+    /** Six bandes en biais, découpées dans la silhouette de l'aile. Aucune subtilité. */
+    private fun rainbowWing(c: Canvas) {
+        asWear {
+            c.save()
+            c.clipPath(batPath())
+            intArrayOf(
+                0xFFE2564F.toInt(), 0xFFE8913F.toInt(), 0xFFF2D04B.toInt(),
+                0xFF4EBE8A.toInt(), 0xFF2F9FD8.toInt(), 0xFF8E3FBF.toInt()
+            ).forEachIndexed { i, col ->
+                c.drawRect(RectF(0f, 60f + i * 16f, 100f, 76f + i * 16f), fill(col))
+            }
+            c.restore()
+            batBones(c, Wool)
+        }
+    }
+
+    /** Sombre à la racine, chaude au bord : la même montée que la bannière en retard. */
+    private fun emberWing(c: Canvas) {
+        asWear {
+            c.save()
+            c.clipPath(batPath())
+            c.drawRect(RectF(0f, 60f, 100f, 160f), fill(Ember))
+            c.drawOval(oval(34f, 118f, 44f, 34f), fill(EmberMid))
+            c.drawOval(oval(24f, 118f, 30f, 22f), fill(EmberHot))
+            c.restore()
+            batBones(c, Ember)
+        }
+    }
+
+    /** Bleu glace, avec des cristaux plantés le long des festons. */
+    private fun frostWing(c: Canvas) {
+        asWear {
+            c.drawPath(batPath(), fill(Frost))
+            batBones(c, FrostD)
+            listOf(
+                Triple(20f, 86f, 7f), Triple(40f, 110f, 6f),
+                Triple(44f, 130f, 5f), Triple(58f, 146f, 6f)
+            ).forEach { (x, y, r) ->
+                Path().apply {
+                    moveTo(x, y - r); lineTo(x + r * 0.55f, y); lineTo(x, y + r)
+                    lineTo(x - r * 0.55f, y); close()
+                }.also { c.drawPath(it, fill(FairyRim)) }
+            }
+        }
+    }
+
+    /** Trouée. Les trous sont découpés DANS la forme, pas peints par-dessus. */
+    private fun tatteredWing(c: Canvas) {
+        asWear {
+            val shape = batPath()
+            listOf(Triple(46f, 98f, 9f), Triple(32f, 116f, 7f), Triple(58f, 130f, 6f))
+                .forEach { (x, y, r) ->
+                    shape.op(
+                        Path().apply { addCircle(x, y, r, Path.Direction.CW) },
+                        Path.Op.DIFFERENCE
+                    )
+                }
+            c.drawPath(shape, fill(Rot))
+            batBones(c, RotDeep)
+        }
+    }
+
+    /** Trois rangs de plumes en écailles, du plus court au plus long. */
+    private fun angelWing(c: Canvas) {
+        asWear {
+            Path().apply {
+                moveTo(88f, 116f)
+                cubicTo(70f, 80f, 34f, 62f, 10f, 78f)
+                cubicTo(4f, 104f, 28f, 140f, 62f, 148f)
+                cubicTo(80f, 146f, 88f, 132f, 88f, 116f)
+                close()
+            }.also { c.drawPath(it, fill(Feather)) }
+
+            val rows = listOf(
+                Triple(74f, 100f, 11f), Triple(56f, 92f, 12f), Triple(38f, 90f, 12f),
+                Triple(70f, 124f, 13f), Triple(50f, 118f, 14f), Triple(32f, 112f, 13f),
+                Triple(64f, 142f, 12f), Triple(46f, 138f, 12f)
+            )
+            rows.forEach { (x, y, r) ->
+                Path().apply {
+                    moveTo(x + r, y)
+                    quadTo(x, y + r * 0.9f, x - r, y)
+                    quadTo(x, y - r * 0.4f, x + r, y)
+                    close()
+                }.also { c.drawPath(it, fill(FeatherD)) }
+            }
+        }
+    }
+
+    /** Deux lobes translucides, cerclés de blanc. Elles ne servent à rien, c'est le but. */
+    private fun fairyWing(c: Canvas) {
+        asWear {
+            val upper = Path().apply {
+                moveTo(86f, 114f)
+                cubicTo(72f, 76f, 34f, 60f, 14f, 78f)
+                cubicTo(6f, 96f, 40f, 116f, 86f, 114f)
+                close()
+            }
+            val lower = Path().apply {
+                moveTo(86f, 118f)
+                cubicTo(60f, 122f, 30f, 132f, 30f, 146f)
+                cubicTo(34f, 156f, 68f, 148f, 86f, 128f)
+                close()
+            }
+            c.drawPath(upper, fill(Fairy)); c.drawPath(lower, fill(Fairy))
+            val rim = stroke(FairyRim, 2.6f)
+            c.drawPath(upper, rim); c.drawPath(lower, rim)
+            // les nervures, deux par lobe
+            val vein = stroke(FairyRim, 1.8f)
+            c.drawLine(84f, 112f, 26f, 82f, vein)
+            c.drawLine(84f, 114f, 34f, 102f, vein)
+            c.drawLine(84f, 122f, 38f, 142f, vein)
+            sparkle(c, 20f, 76f, 5f, FairyRim)
+            sparkle(c, 32f, 148f, 4f, FairyRim)
+        }
+    }
+
+    /** Deux paires longues et fines, comme du papier de soie. */
+    private fun dragonflyWing(c: Canvas) {
+        asWear {
+            listOf(
+                Path().apply {
+                    moveTo(88f, 114f)
+                    cubicTo(60f, 88f, 26f, 78f, 8f, 84f)
+                    cubicTo(16f, 100f, 54f, 114f, 88f, 118f)
+                    close()
+                },
+                Path().apply {
+                    moveTo(88f, 120f)
+                    cubicTo(62f, 122f, 30f, 134f, 20f, 146f)
+                    cubicTo(34f, 154f, 66f, 142f, 88f, 126f)
+                    close()
+                }
+            ).forEach {
+                c.drawPath(it, fill(Odo))
+                c.drawPath(it, stroke(OdoRim, 2.2f))
+            }
+            val vein = stroke(OdoRim, 1.4f)
+            c.drawLine(84f, 112f, 18f, 88f, vein)
+            c.drawLine(84f, 124f, 28f, 144f, vein)
+        }
+    }
+
+    /** Monarque : orange, nervures noires, points blancs sur le bord. */
+    private fun butterflyWing(c: Canvas) {
+        asWear {
+            val upper = Path().apply {
+                moveTo(86f, 112f)
+                cubicTo(74f, 78f, 40f, 60f, 16f, 72f)
+                cubicTo(6f, 92f, 38f, 112f, 86f, 112f)
+                close()
+            }
+            val lower = Path().apply {
+                moveTo(86f, 118f)
+                cubicTo(58f, 120f, 28f, 130f, 28f, 146f)
+                cubicTo(38f, 158f, 74f, 144f, 86f, 126f)
+                close()
+            }
+            c.drawPath(upper, fill(Monarch)); c.drawPath(lower, fill(Monarch))
+            val rim = stroke(Chitin, 4f)
+            c.drawPath(upper, rim); c.drawPath(lower, rim)
+            val vein = stroke(Chitin, 2.2f)
+            c.drawLine(82f, 108f, 30f, 76f, vein)
+            c.drawLine(82f, 110f, 26f, 94f, vein)
+            c.drawLine(82f, 122f, 40f, 144f, vein)
+            listOf(20f to 76f, 32f to 66f, 34f to 148f).forEach { (x, y) ->
+                c.drawCircle(x, y, 3f, fill(White))
+            }
+        }
+    }
+
+    /** Coccinelle : deux élytres rouges à pois, bien trop petites pour la porter. */
+    private fun ladybugWing(c: Canvas) {
+        asWear {
+            val shell = Path().apply {
+                moveTo(88f, 112f)
+                cubicTo(72f, 88f, 46f, 84f, 34f, 100f)
+                cubicTo(28f, 118f, 50f, 134f, 78f, 128f)
+                cubicTo(86f, 124f, 89f, 118f, 88f, 112f)
+                close()
+            }
+            c.drawPath(shell, fill(Beetle))
+            c.drawPath(shell, stroke(Chitin, 3.4f))
+            listOf(
+                Triple(56f, 100f, 5f), Triple(46f, 116f, 4.5f), Triple(70f, 118f, 4f)
+            ).forEach { (x, y, r) -> c.drawCircle(x, y, r, fill(Chitin)) }
+        }
     }
 
     /** Cuisse arrondie plus patte prune à trois orteils, ou une botte par-dessus. */
@@ -209,6 +452,64 @@ object Dragon {
             c.drawRoundRect(RectF(42f, 176f, 88f, 183f), 3.5f, 3.5f, fill(Wool))   // lacet
             c.drawRoundRect(RectF(40f, 157f, 94f, 174f), 8f, 8f, fill(Wool))       // revers
             heart(c, 62f, 166f, 5f, Xmas)
+        }
+    }
+
+    // ---- le compagnon -----------------------------------------------------
+
+    /**
+     * Ce qui est posé par terre à sa droite.
+     *
+     * À droite parce que la queue balaie vers la gauche et que l'ombre au sol s'arrête
+     * vers x=164 : c'est le seul coin de l'espace de dessin qui soit réellement vide,
+     * quelles que soient les autres pièces portées.
+     */
+    private fun friend(c: Canvas, wear: String?) {
+        when (wear) {
+            "peluche" -> peluche(c)
+            "doudou" -> doudou(c)
+        }
+    }
+
+    /** Une petite chose rose assise. Corps, oreilles, tête, deux yeux, et c'est tout. */
+    private fun peluche(c: Canvas) {
+        asWear {
+            c.drawOval(oval(186f, 202f, 20f, 6f), fill(Shade).apply { alpha = 170 })
+            p.alpha = 255
+            c.drawOval(oval(186f, 188f, 17f, 15f), fill(Plush))       // corps
+            c.drawCircle(174f, 170f, 6.5f, fill(PlushD))              // oreilles
+            c.drawCircle(198f, 170f, 6.5f, fill(PlushD))
+            c.drawOval(oval(186f, 174f, 14f, 12f), fill(Plush))       // tête
+            c.drawOval(oval(186f, 192f, 8f, 6f), fill(Wool))          // ventre
+            c.drawCircle(181f, 173f, 1.9f, fill(Ink))
+            c.drawCircle(191f, 173f, 1.9f, fill(Ink))
+            Path().apply { moveTo(183f, 179f); quadTo(186f, 182f, 189f, 179f) }
+                .also { c.drawPath(it, stroke(Ink, 1.8f)) }
+        }
+    }
+
+    /** Un tissu mou en tas, avec le coin relevé — celui qu'on tient, donc le meilleur. */
+    private fun doudou(c: Canvas) {
+        asWear {
+            Path().apply {
+                moveTo(154f, 200f)
+                cubicTo(158f, 180f, 184f, 174f, 204f, 181f)
+                cubicTo(214f, 185f, 212f, 198f, 202f, 203f)
+                cubicTo(186f, 209f, 164f, 208f, 154f, 200f)
+                close()
+            }.also { c.drawPath(it, fill(Quilt)) }
+
+            Path().apply { moveTo(164f, 196f); quadTo(184f, 189f, 204f, 194f) }
+                .also { c.drawPath(it, stroke(QuiltDim, 2.4f)) }
+            Path().apply { moveTo(166f, 202f); quadTo(184f, 197f, 202f, 200f) }
+                .also { c.drawPath(it, stroke(QuiltDim, 2f)) }
+
+            Path().apply {
+                moveTo(192f, 178f)
+                quadTo(204f, 164f, 213f, 171f)
+                quadTo(206f, 180f, 192f, 180f)
+                close()
+            }.also { c.drawPath(it, fill(QuiltDim)) }
         }
     }
 

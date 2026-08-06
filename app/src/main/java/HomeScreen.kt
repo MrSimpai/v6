@@ -13,6 +13,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import com.example.medtap.Her
 import com.example.medtap.data.DayState
 import com.example.medtap.data.DoseLog
@@ -27,7 +31,14 @@ import java.util.*
 data class HomeState(
     val meds: List<Medication> = emptyList(),
     val logs: List<DoseLog> = emptyList(),
-    val takenSlots: Set<Pair<String, Long>> = emptySet(),
+    /**
+     * Les couples (médicament, minuit de la journée) déjà enregistrés.
+     *
+     * La journée et non l'horodatage du créneau : une dose conserve l'heure qu'avait le
+     * médicament au moment de la prise, donc changer l'heure du rappel faisait disparaître
+     * la coche d'aujourd'hui alors que la dose était bel et bien notée.
+     */
+    val takenDays: Set<Pair<String, Long>> = emptySet(),
     val justLogged: Medication? = null,
     val dayComplete: Boolean = false,   // toutes les doses du jour sont enregistrées
     val streakOverlay: Int? = null,     // jours à fêter en plein écran, sinon null
@@ -37,10 +48,30 @@ data class HomeState(
     val batteryRestricted: Boolean = false,
     val week: List<DayState> = emptyList(),
     val freezeUsed: Boolean = false,
+    /**
+     * L'essayage : jusqu'à quand tout le casier est ouvert, ou `null` le reste du temps.
+     *
+     * Rien de ce qui se passe pendant cette fenêtre ne descend jusqu'à la base. Ce n'est
+     * pas un raccourci pour tout débloquer — les pièces se gagnent une par journée
+     * complète et c'est ce qui leur donne leur valeur — c'est cinq minutes de cabine
+     * d'essayage. À l'expiration, elle se retrouve exactement comme avant.
+     */
+    val previewUntil: Long? = null,
+    val previewWorn: Set<String> = emptySet(),
+    /** Créneaux passés cette semaine sans rappel posé ni dose notée : une panne, pas un risque. */
+    val silentMisses: Int = 0,
     val pairing: Boolean = false,
     val hasNfc: Boolean = true,
     val nfcOff: Boolean = false
 )
+
+/**
+ * Ce qu'elle porte à l'écran : la tenue d'essayage tant qu'elle dure, sinon ce qui est
+ * réellement mis. Le widget, lui, lit la base et continue donc de montrer la vraie tenue —
+ * l'essayage n'existe que dans l'app, là où on peut voir le compte à rebours.
+ */
+val HomeState.dressed: Set<String>
+    get() = if (previewUntil != null) previewWorn else worn
 
 private val clock = SimpleDateFormat("H'h'mm", Locale.CANADA_FRENCH)
 
@@ -61,7 +92,28 @@ fun HomeScreen(
     onCancelPairing: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val now = System.currentTimeMillis()
+    // L'heure, qui avance pendant qu'on regarde l'écran.
+    //
+    // `System.currentTimeMillis()` lu une seule fois n'est pas un état observable : la
+    // valeur restait figée à l'instant de la composition, et comme rien ne recompose tant
+    // que la base ne change pas, l'humeur du dragon ne bougeait plus. Une dose devenait
+    // due, le retard passait l'heure, et le dragon gardait la tête qu'il avait à
+    // l'ouverture — jusqu'à ce qu'on ferme l'app et qu'on la rouvre, ce qui refait une
+    // composition depuis zéro. C'est exactement le symptôme qu'on voyait.
+    //
+    // `repeatOnLifecycle(RESUMED)` fait deux choses d'un coup : rien ne tourne quand
+    // l'écran n'est pas devant les yeux, et la valeur est rafraîchie à l'instant même du
+    // retour — donc pas de dragon périmé pendant les vingt premières secondes.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                now = System.currentTimeMillis()
+                delay(20_000)
+            }
+        }
+    }
 
     // Which row is mid-removal. Held here rather than in the row so that opening a second
     // confirmation closes the first -- two armed delete buttons at once is how you tap
@@ -74,12 +126,12 @@ fun HomeScreen(
 
     // A dose is owed once its slot has passed and nothing has been logged against it.
     val owed = state.meds.filter { med ->
-        val slot = Slots.todayAt(med)
-        slot <= now && (med.tagId to slot) !in state.takenSlots
+        val slot = Slots.todayAt(med, now)
+        slot <= now && (med.tagId to Slots.dayOf(slot)) !in state.takenDays
     }
 
     // How late is the most overdue thing? That drives the dragon's face.
-    val worstLateMin = owed.maxOfOrNull { (now - Slots.todayAt(it)) / 60_000L } ?: 0L
+    val worstLateMin = owed.maxOfOrNull { (now - Slots.todayAt(it, now)) / 60_000L } ?: 0L
     val mood = when {
         state.justLogged != null -> Mood.Cheering
         worstLateMin >= 120 -> Mood.Overdue
@@ -97,7 +149,9 @@ fun HomeScreen(
             .padding(top = 28.dp, bottom = 40.dp)
     ) {
         Text(
-            SimpleDateFormat("EEEE d MMMM", Locale.CANADA_FRENCH).format(Date())
+            // Sur la même horloge que le reste de l'écran : sinon l'app laissée ouverte
+            // toute la nuit affiche encore la date d'hier au matin.
+            SimpleDateFormat("EEEE d MMMM", Locale.CANADA_FRENCH).format(Date(now))
                 .uppercase(Locale.CANADA_FRENCH),
             style = Type.Label, color = Pal.Muted
         )
@@ -114,6 +168,33 @@ fun HomeScreen(
             },
             style = Type.Display, color = Pal.Ink
         )
+
+        // Une panne constatée, pas un risque. Elle a sa place sur l'écran d'accueil alors
+        // que l'avertissement de batterie n'y est plus : celui-là est permanent et devient
+        // du décor, celui-ci n'apparaît que le jour où un rappel n'est réellement pas
+        // parti. Ce jour-là, c'est la chose la plus importante de l'écran.
+        if (state.silentMisses > 0) {
+            Spacer(Modifier.height(14.dp))
+            Surface(color = Pal.Card, shape = Soft) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("Je n'ai pas réussi à te prévenir 😔", style = Type.Title, color = Pal.Apricot)
+                    Text(
+                        if (state.silentMisses == 1)
+                            "Un rappel n'est pas parti cette semaine. Le téléphone a mis " +
+                                "l'app en veille."
+                        else
+                            "${state.silentMisses} rappels ne sont pas partis cette semaine. " +
+                                "Le téléphone met l'app en veille.",
+                        style = Type.Label, color = Pal.Muted
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Va dans les réglages, à droite, pour que ça n'arrive plus.",
+                        style = Type.Label, color = Pal.Muted
+                    )
+                }
+            }
+        }
 
         if (state.freezeUsed) {
             Spacer(Modifier.height(14.dp))
@@ -138,7 +219,7 @@ fun HomeScreen(
                 Modifier.fillMaxWidth().padding(vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Mascot(mood, Modifier.size(200.dp), worn = state.worn)
+                Mascot(mood, Modifier.size(200.dp), worn = state.dressed)
                 Spacer(Modifier.height(8.dp))
                 AnimatedContent(targetState = mood, label = "prompt") { m ->
                     Text(
@@ -170,18 +251,32 @@ fun HomeScreen(
         Spacer(Modifier.height(10.dp))
 
         state.meds.forEach { med ->
-            val slot = Slots.todayAt(med)
-            val taken = (med.tagId to slot) in state.takenSlots
+            val slot = Slots.todayAt(med, now)
+            val taken = (med.tagId to Slots.dayOf(slot)) in state.takenDays
+
+            // Le créneau que le bouton remplirait. Même règle que celle qui écrit en base
+            // — `Slots.loggableSlots` — mais vérifiée contre ce que l'écran a sous la
+            // main. Deux copies de la règle, c'est deux occasions de ne pas être d'accord
+            // sur ce que le bouton vient de faire.
+            val target = Slots.loggableSlots(med, now)
+                .firstOrNull { (med.tagId to Slots.dayOf(it)) !in state.takenDays }
+
             MedRow(
                 med = med,
                 taken = taken,
                 due = slot <= now,
-                loggable = Slots.canLogNow(med),
+                loggable = target != null,
+                // Passé minuit, le bouton note la dose d'HIER. Il doit le dire : un
+                // bouton qui enregistre autre chose que ce qu'on croit est pire qu'un
+                // bouton grisé.
+                forYesterday = target != null && Slots.dayOf(target) != Slots.dayOf(now),
                 confirmingRemoval = confirmingRemoval == med.tagId,
                 onAskRemove = { confirmingRemoval = med.tagId },
                 onCancelRemove = { confirmingRemoval = null },
                 onConfirmRemove = { confirmingRemoval = null; onForget(med) },
-                log = state.logs.firstOrNull { it.tagId == med.tagId && it.scheduledFor == slot },
+                log = state.logs.firstOrNull {
+                    it.tagId == med.tagId && Slots.dayOf(it.scheduledFor) == Slots.dayOf(slot)
+                },
                 onMarkTaken = { onMarkTaken(med) },
                 confirmingSkip = confirmingSkip == med.tagId,
                 onAskSkip = { confirmingSkip = med.tagId },
@@ -252,6 +347,7 @@ private fun MedRow(
     taken: Boolean,
     due: Boolean,
     loggable: Boolean,
+    forYesterday: Boolean,
     log: DoseLog?,
     confirmingRemoval: Boolean,
     onAskRemove: () -> Unit,
@@ -298,14 +394,19 @@ private fun MedRow(
             // The button only appears once the dose is due, or nearly. Offering it at
             // 4am for a 9am dose invites logging today's pill in the middle of the
             // night, which would then silence the morning reminder.
-            if (!taken && loggable) {
+            if ((!taken || forYesterday) && loggable) {
                 Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = onMarkTaken,
                     shape = Pill,
                     colors = ButtonDefaults.buttonColors(containerColor = Pal.Iris),
                     modifier = Modifier.fillMaxWidth().height(46.dp)
-                ) { Text("Je l'ai prise", style = Type.Title) }
+                ) {
+                    Text(
+                        if (forYesterday) "Je l'ai prise (hier soir)" else "Je l'ai prise",
+                        style = Type.Title
+                    )
+                }
 
                 if (!med.isManual) {
                     Spacer(Modifier.height(6.dp))
