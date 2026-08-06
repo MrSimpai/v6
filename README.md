@@ -101,6 +101,26 @@ the notification banner**. Icon, tile and reminder are always the same colour:
 | `SULK` / `DRAMA` | `.Late` | magenta, frowning |
 | `ANGRY` | `.Overdue` | terracotta, lowered brows |
 
+The backgrounds are **drawings, not flat colours** (`ic_bg_*.xml`): a diagonal gradient, a
+soft halo behind the dragon's head, three sparkles. A solid fill can only ever be a solid
+fill, and it sat on her home screen all day looking like exactly that. Nothing finer than a
+sparkle goes in — some launchers render the icon at 48dp, and any smaller detail turns to
+grime at that size.
+
+### The icon can't wear the outfit — the shortcut can
+
+Worth stating plainly, because it looks like an oversight: Android only knows icons that
+were declared at **compile time**. Swapping between a few prepared ones is possible, which
+is what `IconSwitcher` does for mood. Handing the launcher an image generated at runtime is
+not — there's no public API for it, and with 55 pieces you'd need a drawing per
+combination, which runs to millions.
+
+A **dynamic shortcut** does accept a bitmap. So `DragonShortcut` pushes one, drawn by the
+same `Dragon` renderer as the app and the widget, wearing whatever she currently has on:
+long-press the icon and there she is, hat and plush included. It opens the locker rather
+than logging a dose — logging belongs in the app, where the confirmation, the celebration
+and the chest are.
+
 Four steps, not eight, because every swap costs a launcher redraw -- the icon tracks
 *whether there's something to do and roughly how long it's been*, not every shade the
 widget goes through. The icon backgrounds in `ic_colors.xml` are a notch lighter than

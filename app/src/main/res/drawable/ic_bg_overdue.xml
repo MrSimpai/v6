@@ -25,8 +25,8 @@
     </path>
 
     <!-- le halo, centré sur le safe zone : c'est lui qui détache le dragon du fond -->
-    <path android:pathData="M54,26 a30,30 0 1,0 0.1,0 z" android:fillColor="#26FFFFFF" />
-    <path android:pathData="M54,32 a22,22 0 1,0 0.1,0 z" android:fillColor="#1FFFFFFF" />
+    <path android:pathData="M24,26 a30,30 0 1,0 60,0 a30,30 0 1,0 -60,0 Z" android:fillColor="#26FFFFFF" />
+    <path android:pathData="M32,32 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0 Z" android:fillColor="#1FFFFFFF" />
 
     <path android:pathData="M22,26 q2.4,-7.6 9,-9.6 q-6.6,-2 -9,-9.6 q-2.4,7.6 -9,9.6 q6.6,2 9,9.6 z"
         android:fillColor="#B3FFFFFF" />
