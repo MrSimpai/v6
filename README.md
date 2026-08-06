@@ -55,10 +55,18 @@ familiar and contracted, `SERIEUX` is plain, unhurried standard French.
 
 ## What makes the notification feel like Duolingo's
 
-- **A drawn banner, not text.** `BigPictureStyle` shows a 1024×512 panel generated on the
-  fly: dragon on the left, message set in large type on the right, scale-pattern
-  background. This is the single biggest reason Duo's reminders read as *a character
-  talking to you* rather than a system message. See `reminder/NotifArt.kt`.
+- **A drawn banner, not text.** `BigPictureStyle` shows a panel generated on the fly:
+  dragon on the left, the message in a comic speech bubble on the right, over a painted
+  scene that changes with her mood — starry night when nothing is due, sunrise when it's
+  time, rain at an hour late, embers past two. This is the single biggest reason Duo's
+  reminders read as *a character talking to you* rather than a system message. See
+  `reminder/NotifArt.kt`.
+- **Nothing is ever cut off.** The banner is 1024 wide and grows in height to fit the
+  message, up to the point Android starts cropping big pictures; only past that does the
+  type step down a size. The earlier version was a fixed 1024×512 that silently clipped
+  the last lines of the longer messages, which is exactly the ones that mattered.
+- **The text sits in a white bubble, not on the art.** The scene runs from midnight blue
+  to pale sunrise depending on the tier, and no single ink colour is legible on both.
 - **The dragon's face as the large icon**, cropped round, matching her current mood.
 - **Colorized** notification tinted to the dragon's pink (plum in the serious tier).
 - **It does not go away.** Ongoing, non-swipeable, with a `deleteIntent` that re-posts it.
@@ -357,7 +365,25 @@ turns out to be wrong.
 
 ## The widget
 
-Dragon, current state, and a button that logs the dose without opening anything -- the
+Laid out like a Duolingo tile: a status bar across the top (streak flame on the left,
+the week's seven dots on the right), one short line, and the dragon taking every pixel
+that's left. The dragon is on `layout_weight`, so a bigger tile draws a bigger dragon
+instead of adding a margin around a small one.
+
+The whole background is a painted scene in the current mood -- the same five as the
+notification banner -- so the widget changes colour through the day, which is half the
+point of having a dragon on your home screen.
+
+The streak sits in a dark translucent pill with a flame, and stays put at zero with the
+flame greyed out. A badge that appears and disappears makes the tile jump from one day
+to the next; and it is deliberately *not* a red numbered circle in the top corner, which
+is the universal sign of a pending chore rather than a reward.
+
+The line is `autoSizeTextType="uniform"`: it shrinks to fit the tile rather than ending
+in an ellipsis. `FloMessages.widgetLine` keeps it to about three words for the same
+reason -- the sentence written for the home screen doesn't fit on two cells.
+
+Earlier it also had a button that logged the dose without opening anything -- the
 shortest possible path between remembering and having recorded it. It goes through
 `Reminders.logFromOutside`, the same slot matching and streak counting as the in-app
 button, so the two can never tell different stories.
@@ -366,6 +392,36 @@ button, so the two can never tell different stories.
 
 Same screen as adding, with `existing` filled in. The key is preserved: it's what ties a
 medication to its whole history, and losing that to fix a typo would be absurd.
+
+## The week, in seven dots
+
+Monday leftmost, Sunday rightmost, always -- on the home screen, on the celebration, and
+in the widget. A rolling "last seven days" would shift every morning and force a re-read
+each time; a fixed week is recognised at a glance, like a calendar.
+
+Five states, five colours: done (mint), frozen (teal, white ring), today (framboise, with
+a halo and a slow pulse), missed (pale blush), still to come (barely there). Today is the
+only dot that asks for anything, so it's the only one that moves.
+
+On the widget the same five states are drawn in white and transparency instead. The
+painted scene behind them changes five times a day, and a fixed palette eventually lands
+on a background of its own hue and vanishes.
+
+A 47-day streak says nothing about *this* week. These dots are the only view that answers
+"am I doing alright right now" honestly.
+
+## The head-up, fifteen minutes early
+
+Every other tier on the ladder reacts to lateness, which means the first word of the day
+was always a small accusation. `ACTION_SOON` fires fifteen minutes *before* the dose, in
+its own quiet channel with vibration off, and says nothing more than "it's nearly time".
+
+It expires by itself at the scheduled minute -- `setTimeoutAfter(slot - now)` -- because
+past that point the real reminder takes over, and two notifications saying the same thing
+in two different tones is worse than one.
+
+The alarm is inexact and `RTC` rather than `RTC_WAKEUP`: landing to the second doesn't
+matter a quarter of an hour ahead, and it doesn't justify pulling the phone out of doze.
 
 ## Removing a medication
 

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.medtap.Her
+import com.example.medtap.data.DayState
 import com.example.medtap.reminder.FloMessages
 import kotlin.math.cos
 import kotlin.math.sin
@@ -41,7 +42,7 @@ import kotlin.random.Random
  * on its own is something that happened at you; one you close is something you finished.
  */
 @Composable
-fun StreakCelebration(days: Int, onDismiss: () -> Unit) {
+fun StreakCelebration(days: Int, week: List<DayState>, onDismiss: () -> Unit) {
 
     // Everything hangs off this single spring so the whole screen arrives as one gesture
     // rather than a sequence of unrelated tweens.
@@ -150,18 +151,10 @@ fun StreakCelebration(days: Int, onDismiss: () -> Unit) {
 
             Spacer(Modifier.height(22.dp))
 
-            // Seven dots: the current week, filled up to where she is.
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                repeat(7) { i ->
-                    val on = i < (days.coerceAtMost(7))
-                    Box(
-                        Modifier
-                            .size(if (on) 13.dp else 10.dp)
-                            .clip(Pill)
-                            .background(if (on) Pal.Mint else Pal.MintSoft)
-                            .alpha(enter.value)
-                    )
-                }
+            // La vraie semaine, pas un remplissage proportionnel à la série : ici on
+            // fête une journée précise, donc autant montrer laquelle.
+            if (week.size == 7) {
+                WeekDots(week, Modifier.alpha(enter.value))
             }
 
             Spacer(Modifier.height(26.dp))

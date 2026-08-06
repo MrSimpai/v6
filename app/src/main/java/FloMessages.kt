@@ -41,8 +41,25 @@ data class FloLine(val title: String, val body: String = "")
 
 object FloMessages {
 
+    /**
+     * Avant l'heure, pas après. Tout le reste de l'échelle réagit à un retard ; ces
+     * lignes-là arrivent quand il n'y a encore rien à se reprocher, donc elles sont
+     * légères et ne demandent rien — juste un coup de coude.
+     */
+    private val AVANCE = listOf(
+        FloLine("Dans un quart d'heure", "${Her.dragon} prépare la dose."),
+        FloLine("Petit avertissement 🐉", "C'est bientôt l'heure. Aucune urgence."),
+        FloLine("Ça s'en vient, ${Her.name}", "Quinze minutes. Le temps de finir ce que tu fais."),
+        FloLine("Coucou", "Juste pour que tu saches : c'est presque l'heure."),
+        FloLine("Bientôt 💊", "Si c'est plus simple maintenant, ça compte pareil."),
+        FloLine("${Her.dragon} s'étire", "Elle se prépare. Toi aussi, tantôt.")
+    )
+
+    /** La ligne du rappel anticipé, semée sur le créneau pour ne pas changer à chaque pose. */
+    fun early(slot: Long): FloLine = AVANCE[Random(slot / 60000).nextInt(AVANCE.size)]
+
     private val PONCTUEL = listOf(
-        FloLine("C'est l'heure, ${Her.name} 💊", "${Her.dragon} a préparé ta petite dose."),
+        FloLine("C'est l'heure 💊", "${Her.dragon} a préparé ta petite dose, ${Her.name}."),
         FloLine("Psst ${Her.name}.", "C'est le moment. Une pilule, et je te laisse tranquille."),
         FloLine("Ding 🐉", "${Her.dragon} réclame son dû. Une pilule."),
         FloLine("Sup, Flomingo🦩", "Ta dose t'attend. Prends-la et je retourne dormir."),
@@ -53,59 +70,59 @@ object FloMessages {
         // Lignes écrites à la main en dessous :)
         FloLine("Floflosky, c'est pill time"),
         FloLine("toc toc", "Qui est là ? Ta médication. Pas compliqué lala."),
-        FloLine("Pillule!! boit de l'eau en meme temps 🥰"),
-        FloLine("Wow, tes cheveux sont vraiment beaux aujourd'hui", "Ohh oui ta pilule 🤭")
+        FloLine("Pillule!! 🥰", "Bois de l'eau en même temps."),
+        FloLine("Wow 🤭", "Tes cheveux sont vraiment beaux aujourd'hui. Ohh oui, ta pilule.")
     )
 
     private val RELANCE = listOf(
         FloLine("${Her.name} ?", "La pilule est toujours là. Je la regarde. Elle me regarde."),
-        FloLine("J'attends encore, Floflosky", "J'ai compté les tuiles du plafond. Deux fois."),
-        FloLine("Petit dragon, grande patience", "Grande, mais pas infinie."),
+        FloLine("J'attends, Floflosky", "J'ai compté les tuiles du plafond. Deux fois."),
+        FloLine("Grande patience 🐉", "Grande, mais pas infinie."),
         FloLine("hey. hey ${Her.name}. hey.", "La. Pilule."),
         FloLine("🙄"),
-        FloLine("Je sais que tu as vu l'autre notification. Et je sais que tu sais."),
+        FloLine("Je sais, ${Her.name}", "Tu as vu l'autre notification. Et je sais que tu sais."),
         FloLine("Rappel gentil 🐉", "Gentil pour l'instant."),
-        FloLine("Vingt minutes. Je dis ça comme ça. Je ne juge pas. Un peu."),
+        FloLine("Vingt minutes ⏳", "Je dis ça comme ça. Je ne juge pas. Un peu."),
 
         // Ligne écrite à la main en dessous :)
-        FloLine("Yoooo, c'est encore moi! PILL TIME")
+        FloLine("Yoooo, c'est encore moi!", "PILL TIME 💊")
     )
 
     private val BOUDERIE = listOf(
-        FloLine("Aucune pression, ${Her.name}", "Je reste ici. À être un dragon. À attendre. Indéfiniment."),
+        FloLine("Aucune pression", "Je reste ici. À être un dragon. À attendre. Indéfiniment."),
         FloLine("C'est correct.", "Tout va bien. Je vais bien. La pilule va bien, toute seule, là-bas."),
         FloLine("Je ne suis pas fâchée", "Juste un petit dragon rose avec des sentiments et un calendrier."),
         FloLine("Une demi-heure, Floflosky", "J'ai commencé à raconter ma propre vie à voix haute, pour passer le temps."),
         FloLine("Cool. Très cool.", "C'est tout à fait normal de laisser un dragon attendre comme ça 💔"),
-        FloLine("${Her.name}. ${Her.realName}. Flobert.", "Je vais continuer d'inventer des noms jusqu'à ce que la dose soit notée."),
-        FloLine("🐉 entre dans sa phase méchante", "Prends la pilule et je redeviens adorable."),
+        FloLine("${Her.name}. ${Her.realName}. Flobert.", "J'invente des noms jusqu'à ce que la dose soit notée."),
+        FloLine("🐉 phase méchante", "Prends la pilule et je redeviens adorable."),
         FloLine("J'attends toujours", "Comme un phare. Un phare rose. Et déçu.")
     )
 
     private val DRAME = listOf(
-        FloLine("Ces rappels ne fonctionnent pas", "Je plaisante, je n'arrêterai jamais. Prends ta pilule, ${Her.name}."),
+        FloLine("Ça ne marche pas 🐉", "Je plaisante, je n'arrêterai jamais. Prends ta pilule, ${Her.name}."),
         FloLine("Une heure, ${Her.name}.", "Je l'ai dit aux autres dragons. Ils sont déçus eux aussi."),
         FloLine("J'ai réfléchi 🐉", "À toi. Qui ne prends pas ta pilule. Pendant soixante longues minutes."),
         FloLine("🐉💔", "Un bouton et c'est réglé. Un seul. C'est tout ce que je demande."),
         FloLine("Dommages émotionnels", "Flo, j'ai un trou en forme de pilule dans le cœur."),
-        FloLine("Je ne veux pas être dramatique", "Mais j'ai composé une ballade. Elle parle de toi. Elle est triste."),
-        FloLine("Soixante minutes, Floflosky", "J'aurais eu le temps de faire une salade de pâtes"),
+        FloLine("Pas dramatique du tout", "J'ai composé une ballade. Elle parle de toi. Elle est triste."),
+        FloLine("Soixante minutes 😔", "Floflosky, j'aurais eu le temps de faire une salade de pâtes."),
         FloLine("Toujours là 🐉", "Toujours rose. Toujours en attente. Je t'aime quand même."),
         FloLine("PILL PILL PILLLL!")
     )
 
     /** Pas de petit nom, pas d'emoji, pas de numéro. Le changement de registre EST le message. */
     private val SERIEUX = listOf(
-        FloLine("${Her.realName}, ta médication",
-            "La dose d'aujourd'hui a plus de deux heures de retard. Prends-la dès que tu peux"),
-        FloLine("${Her.realName}, c'est important",
-            "La dose d'aujourd'hui n'est toujours pas enregistrée. Note-la dans l'application une fois que tu l'as prise."),
-        FloLine("Médication non enregistrée",
-            "${Her.realName}, la dose d'aujourd'hui est très en retard. Si tu l'as déjà prise, note-la pour arrêter les rappels."),
-        FloLine("Deux heures de retard",
-            "Pas de plaisanterie cette fois, ${Her.realName}. Prends la dose d'aujourd'hui, ou note-la si c'est déjà fait."),
         FloLine("${Her.realName}",
-            "Toujours rien d'enregistré aujourd'hui. Si tu sautes la dose volontairement, c'est ton choix — note-la pour ne pas perdre ta série")
+            "Ta dose a plus de deux heures de retard. Prends-la dès que tu peux."),
+        FloLine("C'est important",
+            "${Her.realName}, ta dose n'est pas enregistrée. Note-la une fois prise."),
+        FloLine("Dose non enregistrée",
+            "${Her.realName}, elle est très en retard. Si tu l'as prise, note-la."),
+        FloLine("Deux heures de retard",
+            "Pas de plaisanterie, ${Her.realName}. Prends ta dose, ou note-la."),
+        FloLine("Toujours rien aujourd'hui",
+            "${Her.realName}, si tu sautes volontairement, note-la dans l'app.")
     )
 
     private val PRIS = listOf(
@@ -138,13 +155,13 @@ object FloMessages {
 
     /** Le lendemain d'une dose manquée. Léger, jamais culpabilisant. */
     private val RETOUR = listOf(
-        FloLine("Flo, t'as pas oublié quelque chose?",
-            "On n'en fait pas un drame. Aujourd'hui est un nouveau jour. 🐉"),
-        FloLine("Je sers à quoi moi au juste 😔"),
-        FloLine("${Her.dragon} a dormi toute seule"),
-        FloLine("Il a fait froid cette nuit sans toi 😴"),
-        FloLine("Mmhhh j'ai oublié quelque chose mais je sais pas quoi", "indice : 💊"),
-        FloLine("🤔 Me semble qu'un dragon rose essaye de me rappeler quelque chose..")
+        FloLine("T'as rien oublié? 🐉",
+            "On n'en fait pas un drame. Aujourd'hui est un nouveau jour."),
+        FloLine("Je sers à quoi 😔", "Moi, au juste."),
+        FloLine("Nuit solitaire 😴", "${Her.dragon} a dormi toute seule."),
+        FloLine("Il a fait froid 😴", "Cette nuit, sans toi."),
+        FloLine("Mmhhh, j'ai oublié…", "Quelque chose, mais je sais pas quoi. Indice : 💊"),
+        FloLine("🤔 Me semble que…", "Un dragon rose essaye de me rappeler quelque chose.")
     )
 
     private fun pool(tier: Tier) = when (tier) {
@@ -234,12 +251,12 @@ object FloMessages {
         val what = remaining.joinToString(", ")
         return if (dayStreak > 0)
             FloLine(
-                "Ta série de $dayStreak jours est en jeu 🐉",
-                "$what — il te reste jusqu'à minuit. ${Her.dragon} croise les griffes."
+                "$dayStreak jours en jeu 🐉",
+                "$what — jusqu'à minuit. ${Her.dragon} croise les griffes."
             )
         else
             FloLine(
-                "La journée n'est pas finie 🐉",
+                "Pas encore fini 🐉",
                 "$what — il te reste jusqu'à minuit, ${Her.name}."
             )
     }
@@ -255,6 +272,21 @@ object FloMessages {
         Mood.Sad      -> "${Her.dragon} attend depuis un moment."
         Mood.Waiting  -> "Une dose t'attend."
         Mood.Sleeping -> "Rien de prévu. ${Her.dragon} fait la sieste."
+    }
+
+    /**
+     * La même chose, en trois mots, pour la tuile de l'écran d'accueil.
+     *
+     * [moodLine] est écrite pour une phrase posée sous le dragon dans l'app ; sur un
+     * carré de deux cases elle se réduit à une taille illisible ou se fait couper. Une
+     * ligne séparée coûte moins cher qu'un widget qu'on n'arrive pas à lire.
+     */
+    fun widgetLine(mood: Mood): String = when (mood) {
+        Mood.Cheering -> "C'est noté ✨"
+        Mood.Overdue  -> "Ta dose t'attend"
+        Mood.Sad      -> "${Her.dragon} attend…"
+        Mood.Waiting  -> "C'est l'heure 💊"
+        Mood.Sleeping -> "Rien de prévu 😴"
     }
 
 

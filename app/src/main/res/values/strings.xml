@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Le seul texte qui doit vivre en ressource : Android lit le nom du lanceur
-         avant que le moindre Kotlin ne s'exécute. Le reste est dans Personal.kt. -->
+         avant que le moindre Kotlin ne s'exécute, et le sélecteur de widgets lit sa
+         description sans lancer l'app. Le reste est dans Personal.kt. -->
     <string name="app_name">Le dragon de Flo</string>
+    <string name="widget_description">Le dragon, la série et la semaine.</string>
 </resources>

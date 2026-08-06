@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.medtap.Her
+import com.example.medtap.data.DayState
 import com.example.medtap.data.DoseLog
 import com.example.medtap.data.Medication
 import com.example.medtap.data.Slots
@@ -34,6 +35,7 @@ data class HomeState(
     val worn: Set<String> = emptySet(),    // cosmétiques portés
     val chestReward: String? = null,
     val batteryRestricted: Boolean = false,
+    val week: List<DayState> = emptyList(),
     val freezeUsed: Boolean = false,
     val pairing: Boolean = false,
     val hasNfc: Boolean = true,
@@ -149,6 +151,10 @@ fun HomeScreen(
                         },
                         style = Type.Body, color = Pal.Muted, textAlign = TextAlign.Center
                     )
+                }
+                if (state.week.size == 7) {
+                    Spacer(Modifier.height(14.dp))
+                    WeekDots(state.week)
                 }
                 if (state.pairing) {
                     Spacer(Modifier.height(10.dp))

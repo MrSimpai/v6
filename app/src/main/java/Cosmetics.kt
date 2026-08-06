@@ -37,6 +37,24 @@ object Cosmetics {
             blurb = "Rouges, avec un cœur sur le côté. Elles couinent un peu quand elle marche."
         ),
         Cosmetic(
+            id = "pantoufles",
+            name = "Les pantoufles nuages",
+            slot = Slot.FEET,
+            blurb = "Molles, roses, avec un pompon. Framboise refuse de les enlever pour sortir."
+        ),
+        Cosmetic(
+            id = "couronne",
+            name = "La petite couronne",
+            slot = Slot.HEAD,
+            blurb = "Trois pointes, trois pierres. Elle la porte de travers et personne n'ose le dire."
+        ),
+        Cosmetic(
+            id = "pyjama",
+            name = "Le pyjama étoilé",
+            slot = Slot.BODY,
+            blurb = "Bleu nuit, semé d'étoiles. Techniquement fait pour dormir. Porté à toute heure."
+        ),
+        Cosmetic(
             id = "hoodie",
             name = "Le hoodie de Noël",
             slot = Slot.BODY,

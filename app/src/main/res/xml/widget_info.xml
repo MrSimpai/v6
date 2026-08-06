@@ -1,11 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Redimensionnable : la mise en page donne au dragon la hauteur qui reste, donc une
+     tuile plus grande le montre plus grand au lieu de laisser du vide.
+
+     Pas de `previewLayout` : la tuile n'est faite que de bitmaps posés à l'exécution,
+     donc un aperçu inflaté à froid montrerait un carré vide. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="110dp"
     android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="110dp"
     android:targetCellWidth="2"
     android:targetCellHeight="2"
+    android:description="@string/widget_description"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/widget_dragon"
     android:previewImage="@drawable/ic_dragon_waiting"
-    android:resizeMode="none"
+    android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />

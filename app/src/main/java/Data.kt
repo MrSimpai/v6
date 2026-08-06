@@ -137,6 +137,33 @@ data class OwnedCosmetic(
     val equipped: Boolean = true
 )
 
+/** L'état d'une journée dans la semaine affichée. */
+enum class DayState { DONE, FROZEN, TODAY, MISSED, FUTURE }
+
+/**
+ * Les sept jours de la semaine en cours, **toujours de lundi à dimanche**.
+ *
+ * Une série de 47 jours ne dit rien sur la semaine qu'on est en train de vivre. C'est la
+ * seule vue qui répond honnêtement à « est-ce que ça va en ce moment », et l'ordre fixe
+ * compte : des points qui glissent chaque jour obligeraient à les relire à chaque fois.
+ */
+suspend fun MedDao.weekStatus(meds: List<Medication>): List<DayState> {
+    // DAY_OF_WEEK vaut 1 pour dimanche : ce décalage remet lundi en tête.
+    val todayIdx = (Calendar.getInstance().get(Calendar.DAY_OF_WEEK) + 5) % 7
+    val frozen = freezeDays().toSet()
+    return (0..6).map { i ->
+        val back = todayIdx - i
+        when {
+            back < 0 -> DayState.FUTURE
+            meds.isNotEmpty() &&
+                meds.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, back)) != null } -> DayState.DONE
+            Slots.dayStart(back) in frozen -> DayState.FROZEN
+            back == 0 -> DayState.TODAY
+            else -> DayState.MISSED
+        }
+    }
+}
+
 /**
  * Consecutive days ending today where EVERY medication was logged. Lives here rather than
  * in the activity because both the UI and the reminder receiver need the same number, and

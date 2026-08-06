@@ -36,11 +36,16 @@ object Reminders {
     const val CHANNEL_NAG = "dose_due"
     const val CHANNEL_YAY = "dose_logged"
     const val CHANNEL_RISK = "streak_risk"
+    const val CHANNEL_SOON = "dose_soon"
     const val ACTION_DUE = "com.example.medtap.DUE"
     const val ACTION_NAG = "com.example.medtap.NAG"
     const val ACTION_REPOST = "com.example.medtap.REPOST"
     const val ACTION_ICON = "com.example.medtap.ICON"
     const val ACTION_LASTCALL = "com.example.medtap.LASTCALL"
+    const val ACTION_SOON = "com.example.medtap.SOON"
+
+    /** Combien de minutes avant l'heure prévue le premier mot arrive. */
+    const val HEADSUP_MINUTES = 15
     const val EXTRA_TAG_ID = "tagId"
     const val EXTRA_SLOT = "slot"
     const val EXTRA_MOOD = "mood"
@@ -78,6 +83,15 @@ object Reminders {
             )
         }
         lastCallChannel(nm)
+        if (nm.getNotificationChannel(CHANNEL_SOON) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_SOON, "Bientôt l'heure", NotificationManager.IMPORTANCE_DEFAULT)
+                    .apply {
+                        description = "Un mot quinze minutes avant, sans insister."
+                        enableVibration(false)
+                    }
+            )
+        }
         if (nm.getNotificationChannel(CHANNEL_YAY) == null) {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL_YAY, "Dose enregistrée", NotificationManager.IMPORTANCE_DEFAULT)
@@ -116,9 +130,67 @@ object Reminders {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         // setAlarmClock is the only scheduling call fully exempt from Doze deferral.
-        ctx.getSystemService(AlarmManager::class.java)
-            .setAlarmClock(AlarmManager.AlarmClockInfo(slot, show), alarmPI(ctx, ACTION_DUE, med, slot))
+        val am = ctx.getSystemService(AlarmManager::class.java)
+        am.setAlarmClock(AlarmManager.AlarmClockInfo(slot, show), alarmPI(ctx, ACTION_DUE, med, slot))
+
+        // Le mot d'avance. Inexact et sans réveil : arriver à la minute près n'a aucune
+        // importance quinze minutes avant, et ça ne justifie pas de sortir le téléphone
+        // de veille.
+        val soon = slot - HEADSUP_MINUTES * 60_000L
+        if (soon > System.currentTimeMillis()) {
+            am.set(AlarmManager.RTC, soon, alarmPI(ctx, ACTION_SOON, med, slot))
+        }
     }
+
+    /**
+     * Le rappel anticipé : arrivé avant l'heure, il n'a rien à reprocher.
+     *
+     * Toute l'échelle existante réagit à un retard, ce qui veut dire que le premier mot
+     * de la journée est toujours un constat d'échec. Celui-ci change ça — il prévient
+     * pendant qu'il est encore possible d'être à l'heure, et disparaît tout seul dès que
+     * l'heure est passée.
+     */
+    fun soon(ctx: Context, med: Medication, slot: Long) = postSoon(ctx, med, slot)
+
+    private fun postSoon(ctx: Context, med: Medication, slot: Long) =
+        CoroutineScope(Dispatchers.IO).launch {
+            ensureChannels(ctx)
+            val dao = Db.get(ctx).dao()
+            if (dao.logForSlot(med.tagId, slot) != null) return@launch      // déjà prise en avance
+
+            val line = FloMessages.early(slot)
+            val open = PendingIntent.getActivity(
+                ctx, notifId(med.tagId) + 2,
+                Intent(ctx, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val n = NotificationCompat.Builder(ctx, CHANNEL_SOON)
+                .setSmallIcon(R.drawable.ic_stat_dragon)
+                .setLargeIcon(Dragon.faceBitmap(256, Mood.Sleeping))
+                .setContentTitle(line.title)
+                .setContentText("${med.name} — ${line.body}")
+                .setStyle(
+                    NotificationCompat.BigPictureStyle()
+                        .bigPicture(NotifArt.banner(Mood.Sleeping, line.title, "${med.name} — ${line.body}"))
+                        .bigLargeIcon(null as android.graphics.Bitmap?)
+                        .setBigContentTitle(line.title)
+                )
+                .setColor(Dragon.Pink)
+                .setColorized(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setAutoCancel(true)
+                .setOnlyAlertOnce(true)
+                // Elle s'efface d'elle-même à l'heure prévue : passé ce point, c'est le
+                // vrai rappel qui prend le relais et deux notifications diraient la même
+                // chose avec deux tons différents.
+                .setTimeoutAfter((slot - System.currentTimeMillis()).coerceAtLeast(60_000L))
+                .setContentIntent(open)
+                .build()
+            val nm = NotificationManagerCompat.from(ctx)
+            if (nm.areNotificationsEnabled()) nm.notify(notifId(med.tagId) + 2, n)
+        }
 
     private fun scheduleNag(ctx: Context, med: Medication, slot: Long) {
         val at = System.currentTimeMillis() + med.nagEveryMinutes * 60_000L
@@ -226,7 +298,7 @@ object Reminders {
                 NotificationCompat.BigPictureStyle()
                     .bigPicture(NotifArt.banner(Mood.Sad, line.title, line.body))
                     .bigLargeIcon(null as android.graphics.Bitmap?)
-                    .setSummaryText(line.body)
+                    .setBigContentTitle(line.title)
             )
             .setColor(Dragon.Pink)
             .setColorized(true)
@@ -253,6 +325,8 @@ object Reminders {
         val nm = NotificationManagerCompat.from(ctx)
         nm.cancel(notifId(med.tagId))
         nm.cancel(notifId(med.tagId) + 1)
+        nm.cancel(notifId(med.tagId) + 2)
+        am.cancel(alarmPI(ctx, ACTION_SOON, med, slot))
     }
 
     fun cancelNag(ctx: Context, med: Medication, slot: Long) =
@@ -298,7 +372,9 @@ object Reminders {
                 NotificationCompat.BigPictureStyle()
                     .bigPicture(banner)
                     .bigLargeIcon(null as android.graphics.Bitmap?)  // banner takes over when expanded
-                    .setSummaryText(line.body)
+                    // Pas de résumé : il se poserait, coupé à une ligne, juste au-dessus
+                    // d'une image qui dit déjà la même chose en entier.
+                    .setBigContentTitle(line.title)
             )
             .setColor(if (tier == Tier.SERIEUX) Dragon.Plum else Dragon.Pink)
             .setColorized(true)
@@ -333,6 +409,7 @@ object Reminders {
     fun resolve(ctx: Context, med: Medication, slot: Long) {
         ensureChannels(ctx)
         NotificationManagerCompat.from(ctx).cancel(notifId(med.tagId))
+        NotificationManagerCompat.from(ctx).cancel(notifId(med.tagId) + 2)
         cancelNag(ctx, med, slot)
         scheduleNext(ctx, med)
         scheduleIconUpdate(ctx, Mood.Sleeping, 60_000L)
@@ -365,6 +442,7 @@ object Reminders {
                 NotificationCompat.BigPictureStyle()
                     .bigPicture(NotifArt.banner(Mood.Cheering, line.title, line.body))
                     .bigLargeIcon(null as android.graphics.Bitmap?)
+                    .setBigContentTitle(line.title)
             )
             .setColor(0xFF3FA98D.toInt())
             .setColorized(true)
@@ -425,6 +503,16 @@ object Reminders {
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         val action = intent.action ?: return
+
+        if (action == Reminders.ACTION_SOON) {
+            val tag = intent.getStringExtra(Reminders.EXTRA_TAG_ID) ?: return
+            val slot = intent.getLongExtra(Reminders.EXTRA_SLOT, 0L)
+            val app = ctx.applicationContext
+            CoroutineScope(Dispatchers.IO).launch {
+                Db.get(app).dao().med(tag)?.let { Reminders.soon(app, it, slot) }
+            }
+            return
+        }
 
         if (action == Reminders.ACTION_LASTCALL) {
             Reminders.refreshLastCall(ctx.applicationContext)

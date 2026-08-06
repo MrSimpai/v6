@@ -39,6 +39,11 @@ object Dragon {
     const val Wool     = 0xFFFDF6F0.toInt()   // fourrure et pompon
     const val Xmas     = 0xFFC0392B.toInt()   // rouge du hoodie et des bottes
     const val XmasDeep = 0xFF8E2B22.toInt()   // ombres du rouge
+    const val Gold     = 0xFFE8B84B.toInt()   // couronne
+    const val GoldDeep = 0xFFC9932E.toInt()
+    const val Night    = 0xFF5B6BA8.toInt()   // pyjama
+    const val NightDim = 0xFF44528A.toInt()
+    const val Fluff    = 0xFFF3C6D5.toInt()   // pantoufles
 
     // Ancien nom conservé pour compatibilité avec le code qui l'utilisait.
     const val Crest    = Blush
@@ -108,17 +113,24 @@ object Dragon {
         p.alpha = 255
         c.save()
         c.translate(0f, -flap * (if (mood == Mood.Cheering) 5f else 2f))
-        val boots = "bottes" in worn
-        val hoodie = "hoodie" in worn
+        // Une pièce par emplacement : c'est le catalogue qui décide, pas une liste
+        // d'identifiants codée en dur ici. Ajouter une pièce ne touche donc que deux
+        // endroits — Cosmetics.ALL, et sa fonction de dessin plus bas.
+        val slots = worn.mapNotNull { Cosmetics.byId(it) }.associate { it.slot to it.id }
+        val feet = slots[Slot.FEET]
+        val body = slots[Slot.BODY]
 
         tail(c)
         wing(c, flap); mirrored(c) { wing(c, flap) }
-        leg(c, boots); mirrored(c) { leg(c, boots) }
-        torso(c, hoodie)
-        arm(c, hoodie); mirrored(c) { arm(c, hoodie) }
-        if (hoodie) hoodCollar(c)
+        leg(c, feet); mirrored(c) { leg(c, feet) }
+        torso(c, body)
+        arm(c, body); mirrored(c) { arm(c, body) }
+        if (body == "hoodie") hoodCollar(c)
         head(c, mood)
-        if ("tuque" in worn) tuque(c)
+        when (slots[Slot.HEAD]) {
+            "tuque" -> tuque(c)
+            "couronne" -> couronne(c)
+        }
         c.restore()
         extras(c, mood)
         c.restore()
@@ -160,7 +172,7 @@ object Dragon {
     }
 
     /** Cuisse arrondie plus patte prune à trois orteils, ou une botte par-dessus. */
-    private fun leg(c: Canvas, boot: Boolean) {
+    private fun leg(c: Canvas, wear: String?) {
         c.drawOval(oval(80f, 164f, 24f, 26f), fill(Pink))
 
         val foot = Path().apply {
@@ -172,9 +184,20 @@ object Dragon {
             close()
         }
 
-        if (!boot) {
+        if (wear == null) {
             c.drawPath(foot, fill(Plum))
             listOf(175f, 186f, 196f).forEach { c.drawCircle(43f, it, 6.2f, fill(Plum)) }
+            return
+        }
+
+        if (wear == "pantoufles") {
+            asWear {
+                c.drawPath(foot, fill(Fluff))
+                // le bourrelet de fourrure : trois bosses, pour que ça lise « mou »
+                listOf(46f, 62f, 78f).forEach { c.drawCircle(it, 166f, 11f, fill(Wool)) }
+                c.drawRoundRect(RectF(38f, 158f, 90f, 174f), 8f, 8f, fill(Wool))
+                c.drawCircle(44f, 188f, 8f, fill(Wool))          // pompon
+            }
             return
         }
 
@@ -199,7 +222,7 @@ object Dragon {
     }
 
     /** Corps en poire : épaules étroites, assise large. Le ventre pâle par-dessus. */
-    private fun torso(c: Canvas, hoodie: Boolean) {
+    private fun torso(c: Canvas, wear: String?) {
         val shape = Path().apply {
             moveTo(110f, 112f)
             cubicTo(90f, 112f, 80f, 124f, 77f, 142f)
@@ -211,8 +234,22 @@ object Dragon {
         }
         c.drawPath(shape, fill(Pink))
 
-        if (!hoodie) {
+        if (wear == null) {
             c.drawOval(oval(110f, 166f, 26f, 31f), fill(Belly))
+            return
+        }
+
+        if (wear == "pyjama") {
+            asWear {
+                c.save(); c.clipPath(shape)
+                c.drawRect(RectF(60f, 108f, 160f, 196f), fill(Night))
+                c.drawRect(RectF(60f, 150f, 160f, 154f), fill(NightDim))   // couture
+                listOf(
+                    Triple(86f, 128f, 7f), Triple(132f, 140f, 6f),
+                    Triple(94f, 176f, 6f), Triple(128f, 166f, 7f)
+                ).forEach { (x, y, r) -> sparkle(c, x, y, r, Wool) }
+                c.restore()
+            }
             return
         }
 
@@ -258,7 +295,7 @@ object Dragon {
     }
 
     /** Patte avant : moufle au bord festonné, deux sillons pour les griffes. */
-    private fun arm(c: Canvas, sleeve: Boolean) {
+    private fun arm(c: Canvas, wear: String?) {
         val shape = Path().apply {
             moveTo(90f, 130f)
             cubicTo(83f, 139f, 82f, 151f, 87f, 159f)
@@ -270,13 +307,15 @@ object Dragon {
         }
         c.drawPath(shape, fill(Pink))
 
-        if (sleeve) {
+        if (wear != null) {
             // La manche s'arrête au poignet : la patte et ses griffes restent visibles,
             // sinon on perd le geste des deux pattes jointes qui fait tout le personnage.
             asWear {
                 c.save(); c.clipPath(shape)
-                c.drawRect(RectF(70f, 120f, 112f, 150f), fill(Xmas))
-                c.drawRect(RectF(70f, 150f, 112f, 156f), fill(Wool))
+                c.drawRect(RectF(70f, 120f, 112f, 150f),
+                    fill(if (wear == "pyjama") Night else Xmas))
+                c.drawRect(RectF(70f, 150f, 112f, 156f),
+                    fill(if (wear == "pyjama") NightDim else Wool))
                 c.restore()
             }
         }
@@ -465,7 +504,27 @@ object Dragon {
         }
     }
 
-    private fun sparkle(c: Canvas, cx: Float, cy: Float, r: Float) {
+    /** Couronne à trois pointes, portée légèrement de travers. */
+    private fun couronne(c: Canvas) {
+        asWear {
+            c.save()
+            c.rotate(-7f, 110f, 46f)
+            Path().apply {
+                moveTo(74f, 50f)
+                lineTo(82f, 20f); lineTo(96f, 40f)
+                lineTo(110f, 12f); lineTo(124f, 40f)
+                lineTo(138f, 20f); lineTo(146f, 50f)
+                close()
+            }.also { c.drawPath(it, fill(Gold)) }
+            c.drawRoundRect(RectF(72f, 44f, 148f, 58f), 6f, 6f, fill(GoldDeep))
+            c.drawCircle(82f, 22f, 5f, fill(Pink))
+            c.drawCircle(110f, 14f, 6f, fill(Teal))
+            c.drawCircle(138f, 22f, 5f, fill(Pink))
+            c.restore()
+        }
+    }
+
+    private fun sparkle(c: Canvas, cx: Float, cy: Float, r: Float, color: Int = Blush) {
         Path().apply {
             moveTo(cx, cy - r)
             quadTo(cx + r * 0.28f, cy - r * 0.28f, cx + r, cy)
@@ -473,7 +532,7 @@ object Dragon {
             quadTo(cx - r * 0.28f, cy + r * 0.28f, cx - r, cy)
             quadTo(cx - r * 0.28f, cy - r * 0.28f, cx, cy - r)
             close()
-        }.also { c.drawPath(it, fill(Blush)) }
+        }.also { c.drawPath(it, fill(color)) }
     }
 
     /** Le dragon entier sur fond transparent — widget, aperçus, tout ce qui n'est pas Compose. */

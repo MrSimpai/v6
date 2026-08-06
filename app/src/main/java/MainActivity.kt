@@ -111,6 +111,7 @@ class MainActivity : ComponentActivity() {
                 state.value.streakOverlay?.let { days ->
                     StreakCelebration(
                         days = days,
+                        week = state.value.week,
                         onDismiss = {
                             state.value = state.value.copy(streakOverlay = null)
                             grantDailyCosmetic()
@@ -402,6 +403,7 @@ class MainActivity : ComponentActivity() {
                         meds = meds,
                         logs = logs,
                         takenSlots = logs.map { it.tagId to it.scheduledFor }.toSet(),
+                        week = dao.weekStatus(meds),
                         owned = cosmetics.map { it.id }.toSet(),
                         worn = cosmetics.filter { it.equipped }.map { it.id }.toSet(),
                         batteryRestricted = !ReminderHealth.batteryUnrestricted(this@MainActivity)
