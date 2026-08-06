@@ -391,8 +391,8 @@ The 15-minute head-up gets the same treatment, counting down to the scheduled mi
 
 ## Cosmetics, chests and the locker
 
-One piece per **complete day**, never twice the same, permanent once earned. Seventeen
-exist, across five slots. The catalogue is `Cosmetics.ALL`; adding another is one entry
+One piece per **complete day**, never twice the same, permanent once earned. Fifty-five
+exist, across five slots — 14 head, 14 body, 10 feet, 9 wings, 8 companions. The catalogue is `Cosmetics.ALL`; adding another is one entry
 there plus one drawing function in `Dragon.kt` keyed on the same id. Nothing else needs
 touching — `LockerScreen` iterates `Slot.entries`, so a new slot appears on its own.
 
@@ -407,7 +407,18 @@ Two of the five slots don't behave like clothing:
   breathing bob is restored: a plush that rises and falls in time with the dragon reads as
   levitating. Right rather than left because the tail sweeps left and the ground shadow
   ends around x=164, which makes that corner the only reliably empty space whatever else
-  she's wearing.
+  she's wearing. The six animals share `plushBody` and `plushFace` and differ by
+  **silhouette** — a horn, round ears versus pointed ones, eyes on top of the head, a tail
+  fin. Six identical balls in different colours would be indistinguishable side by side in
+  the locker, and a 60dp thumbnail leaves no other way to tell them apart.
+
+Two body pieces break the "clip it inside the torso" rule, and both had to:
+
+- **The cape** is drawn *before* the body (`capeBehind`), because a cape clipped to the
+  front of the torso isn't a cape, it's an apron. Only the golden clasp is drawn in front.
+- **The dress, swimsuit and apron** have no sleeves. `sleeve()` returns null for them, so
+  the arms stay bare — giving a summer dress a matching sleeve would produce a garment
+  nobody owns.
 
 None of the wings use a `Shader`, and that's deliberate rather than stylistic: a shader
 overrides the paint colour, which would bypass the locker's silhouette tint and show a
