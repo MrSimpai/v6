@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Le fond d'icône quand ça traîne : le magenta des paliers SULK et DRAMA.
+
+     Un aplat de couleur ne peut être que plat, et c'est exactement ce qu'on lui
+     reprochait : du vert, rien d'autre, sur l'écran d'accueil toute la journée. Ici il y a
+     un dégradé, un halo derrière la tête du dragon et trois étincelles — de quoi donner
+     une lumière et une profondeur, sans jamais concurrencer le personnage.
+
+     Rien de plus fin que ça : l'icône descend à 48 dp sur certains lanceurs, et tout détail
+     plus petit qu'une étincelle s'y transforme en salissure. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear"
+                android:startX="8" android:startY="0" android:endX="96" android:endY="108">
+                <item android:offset="0" android:color="#FFB765D6" />
+                <item android:offset="0.55" android:color="#FF9B3AAE" />
+                <item android:offset="1" android:color="#FFC92F79" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- le halo, centré sur le safe zone : c'est lui qui détache le dragon du fond -->
+    <path android:pathData="M54,26 a30,30 0 1,0 0.1,0 z" android:fillColor="#26FFFFFF" />
+    <path android:pathData="M54,32 a22,22 0 1,0 0.1,0 z" android:fillColor="#1FFFFFFF" />
+
+    <path android:pathData="M22,26 q2.4,-7.6 9,-9.6 q-6.6,-2 -9,-9.6 q-2.4,7.6 -9,9.6 q6.6,2 9,9.6 z"
+        android:fillColor="#B3FFFFFF" />
+    <path android:pathData="M88,44 q1.8,-5.7 6.8,-7.2 q-5,-1.5 -6.8,-7.2 q-1.8,5.7 -6.8,7.2 q5,1.5 6.8,7.2 z"
+        android:fillColor="#8CFFFFFF" />
+    <path android:pathData="M84,88 q1.4,-4.4 5.2,-5.6 q-3.8,-1.2 -5.2,-5.6 q-1.4,4.4 -5.2,5.6 q3.8,1.2 5.2,5.6 z"
+        android:fillColor="#66FFFFFF" />
+</vector>

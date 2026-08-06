@@ -2,7 +2,7 @@
 <!-- Le cran du milieu : une demi-heure à deux heures de retard. Le dragon a déjà la tête
      de l'humeur triste, c'est le fond magenta qui dit combien de temps ça dure. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/icbg_late"/>
+    <background android:drawable="@drawable/ic_bg_late"/>
     <foreground android:drawable="@drawable/ic_dragon_overdue"/>
     <monochrome android:drawable="@drawable/ic_stat_dragon"/>
 </adaptive-icon>

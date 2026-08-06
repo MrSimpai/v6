@@ -630,15 +630,18 @@ object Dragon {
      * plutôt que quarante coordonnées dans huit fonctions, et toutes gardent exactement
      * les mêmes proportions entre elles.
      */
-    private const val FRIEND_SCALE = 3f
+    private const val FRIEND_SCALE = 2f
 
     /**
      * Le point fixe de l'agrandissement : son appui au sol, à droite.
      *
      * Elle grandit donc vers le haut et vers la gauche depuis ce point, et reste posée sur
-     * la même ligne de sol que le dragon. À 3x elle passe devant lui — c'est voulu, une
-     * peluche s'appuie contre quelqu'un — mais elle atteint aussi le bas de sa tête. Si un
-     * jour le visage doit rester entièrement dégagé, la limite est autour de 1,9.
+     * la même ligne de sol que le dragon. Elle passe devant lui — c'est voulu, une peluche
+     * s'appuie contre quelqu'un.
+     *
+     * 2x est à peu de chose près la limite haute : à cette taille son sommet arrive juste
+     * sous le menton du dragon, donc le visage reste entièrement dégagé. Au-delà elle
+     * commence à le manger, et à 3x elle occupait presque tout le cadre.
      */
     private const val FRIEND_PIVOT_X = 204f
     private const val FRIEND_PIVOT_Y = 206f

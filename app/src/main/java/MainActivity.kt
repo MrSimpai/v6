@@ -6,6 +6,7 @@ import android.app.KeyguardManager
 import android.nfc.NfcAdapter
 import android.os.PowerManager
 import android.provider.Settings
+import com.example.medtap.reminder.DragonShortcut
 import com.example.medtap.reminder.DragonWidget
 import android.nfc.Tag
 import android.os.Build
@@ -478,6 +479,12 @@ class MainActivity : ComponentActivity() {
                         streak = dao.currentStreak(meds)
                     )
                     DragonWidget.refresh(this@MainActivity)
+                    // Le raccourci du lanceur porte la tenue du moment. L'icône, elle,
+                    // ne le peut pas — voir DragonShortcut pour pourquoi.
+                    DragonShortcut.refresh(
+                        this@MainActivity,
+                        cosmetics.filter { it.equipped }.map { it.id }.toSet()
+                    )
                 }
         }
     }

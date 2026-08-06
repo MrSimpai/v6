@@ -3,6 +3,10 @@
     <!-- Le seul texte qui doit vivre en ressource : Android lit le nom du lanceur
          avant que le moindre Kotlin ne s'exécute, et le sélecteur de widgets lit sa
          description sans lancer l'app. Le reste est dans Personal.kt. -->
-    <string name="app_name">Le dragon de Flo</string>
+    <!-- Le nom du dragon, et rien d'autre. « Le dragon de Flo » décrivait l'app à
+         quelqu'un d'extérieur ; sous l'icône, sur son écran à elle, c'est un prénom qu'on
+         veut lire. Duolingo ne s'appelle pas « L'app de langues avec la chouette ». -->
+    <string name="app_name">Framboise</string>
     <string name="widget_description">Le dragon, la série et la semaine.</string>
+    <string name="shortcut_locker">Le casier</string>
 </resources>
