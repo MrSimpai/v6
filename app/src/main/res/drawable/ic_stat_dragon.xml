@@ -1,15 +1,47 @@
+<!--
+  L'icône de la barre d'état : la TÊTE, et rien d'autre, aussi grosse que le carré le
+  permet.
+
+  Avant, c'était le dragon en entier. Sur une barre d'état, ce carré fait vingt-quatre
+  points de côté et Android n'en garde que la forme, en blanc uni : le corps, les pattes
+  et la queue devenaient une masse indistincte sous une tête de six points de large. À
+  cette taille-là, la moitié inférieure du dessin ne coûtait que la place qu'elle prenait
+  à la seule partie reconnaissable.
+
+  La tête occupe donc tout le cadre — cent unités de large au lieu de cinquante-neuf, soit
+  1,7 fois plus dans chaque direction — et les yeux sont percés dans la silhouette plutôt
+  que dessinés par-dessus. C'est ce qui empêche la forme d'être une tache : `evenOdd` fait
+  des sous-tracés intérieurs des trous, et Android ne conserve que l'alpha, donc les trous
+  laissent passer la barre d'état.
+
+  Les cornes restent. Sans elles, la tête est ronde et pourrait être n'importe quoi ; ce
+  sont elles qui font que la notification est reconnaissable avant d'être lue.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
     android:viewportWidth="108" android:viewportHeight="108">
-  <group android:scaleX="0.40" android:scaleY="0.40"
-      android:translateX="10" android:translateY="4">
+  <!--
+    Le dessin d'origine vit dans un repère de 220 unités, partagé avec `ic_dragon_calm`
+    pour que les deux dragons ne puissent pas diverger. Tête et cornes y occupent
+    x 36→184 et y 4→114 ; ce groupe met ces 148 sur 110 au milieu du carré, avec quatre
+    unités de marge.
+  -->
+  <group android:scaleX="0.676" android:scaleY="0.676"
+      android:translateX="-20.34" android:translateY="14.12">
     <path android:fillColor="#FFFFFFFF" android:pathData="M 84,58 C 64,42 58,20 68,4 C 80,22 100,42 108,54 Z"/>
     <path android:fillColor="#FFFFFFFF" android:pathData="M 64,78 C 46,64 36,44 40,28 C 55,42 74,60 80,70 Z"/>
     <group android:translateX="220" android:scaleX="-1">
       <path android:fillColor="#FFFFFFFF" android:pathData="M 84,58 C 64,42 58,20 68,4 C 80,22 100,42 108,54 Z"/>
       <path android:fillColor="#FFFFFFFF" android:pathData="M 64,78 C 46,64 36,44 40,28 C 55,42 74,60 80,70 Z"/>
     </group>
-    <path android:fillColor="#FFFFFFFF" android:pathData="M65,74 a45,40 0 1,0 90,0 a45,40 0 1,0 -90,0 Z"/>
-    <path android:fillColor="#FFFFFFFF" android:pathData="M 110,112 C 90,112 80,124 77,142 C 72,163 76,184 88,192 C 99,198 121,198 132,192 C 144,184 148,163 143,142 C 140,124 130,112 110,112 Z"/>
+    <!--
+      Un seul tracé pour la tête ET les deux yeux : c'est la condition pour que `evenOdd`
+      les creuse. Deux tracés séparés donneraient deux disques blancs par-dessus un blanc,
+      c'est-à-dire rien du tout.
+    -->
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+        android:pathData="M65,74 a45,40 0 1,0 90,0 a45,40 0 1,0 -90,0 Z
+                          M83,82 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0 Z
+                          M119,82 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0 Z"/>
   </group>
 </vector>

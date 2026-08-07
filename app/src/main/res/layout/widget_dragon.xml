@@ -79,9 +79,12 @@
             android:shadowRadius="3"
             android:text="jamais deux sans toi" />
 
+        <!-- `wrap_content`, pas une hauteur fixe : sur Android 12+ le dragon est
+             redimensionné à l'exécution selon la tuile, et une rangée figée à 42 dp le
+             rognerait dès qu'il grandit. -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="42dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:orientation="horizontal"
             android:gravity="bottom">

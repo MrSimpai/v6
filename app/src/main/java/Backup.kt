@@ -18,8 +18,13 @@ import org.json.JSONObject
  */
 object Backup {
 
-    /** 2 ajoute `createdAt` aux médicaments. Les fichiers de version 1 se relisent tels quels. */
-    private const val VERSION = 2
+    /**
+     * 2 ajoute `createdAt` aux médicaments, 3 les sept plages de la semaine. Les fichiers
+     * plus anciens se relisent tels quels : un champ absent vaut son défaut, et le défaut
+     * de `schedule` est « la même heure tous les jours », c'est-à-dire ce que le fichier
+     * décrivait déjà.
+     */
+    private const val VERSION = 3
 
     suspend fun export(ctx: Context, uri: Uri) {
         val dao = Db.get(ctx).dao()
@@ -33,7 +38,7 @@ object Backup {
                     put("tagId", m.tagId); put("name", m.name); put("doseText", m.doseText)
                     put("hourOfDay", m.hourOfDay); put("minute", m.minute)
                     put("nagEveryMinutes", m.nagEveryMinutes); put("active", m.active)
-                    put("createdAt", m.createdAt)
+                    put("createdAt", m.createdAt); put("schedule", m.schedule)
                 })
             }
         })
@@ -94,7 +99,8 @@ object Backup {
                         // Une sauvegarde d'avant la version 4 n'a pas ce champ. Zéro,
                         // « a toujours existé », restaure la série telle qu'elle était :
                         // l'heure d'aujourd'hui la ramènerait à un.
-                        createdAt = o.optLong("createdAt", 0L)
+                        createdAt = o.optLong("createdAt", 0L),
+                        schedule = o.optString("schedule", "")
                     )
                 )
                 n++

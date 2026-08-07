@@ -234,10 +234,21 @@ object NotifArt {
         p.shader = null
     }
 
-    /** Le fond du widget : carré, coins arrondis découpés dans le bitmap lui-même. */
-    fun widgetBg(px: Int, vibe: Vibe, night: Boolean): Bitmap {
-        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-        scene(Canvas(bmp), px.toFloat(), px.toFloat(), vibe, night, px * 0.14f)
+    /**
+     * Le fond du widget, aux proportions réelles de la tuile.
+     *
+     * Il était carré, et la vue l'étirait en `fitXY`. Sur une tuile carrée ça ne se voyait
+     * pas ; dès qu'on la redimensionnait, les coins arrondis devenaient des ellipses, le
+     * soleil un ovale et les écailles des losanges. Un fond dessiné aux bonnes proportions
+     * n'a plus rien à étirer.
+     *
+     * Le rayon vient de l'appelant, en pixels, parce que lui seul connaît la densité de
+     * l'écran. Un rayon calculé ici en proportion du petit côté donnerait 15 dp sur une
+     * 2x2 et 46 dp sur une 4x4 : la grande tuile finirait en pastille.
+     */
+    fun widgetBg(w: Int, h: Int, radiusPx: Float, vibe: Vibe, night: Boolean): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        scene(Canvas(bmp), w.toFloat(), h.toFloat(), vibe, night, radiusPx)
         return bmp
     }
 

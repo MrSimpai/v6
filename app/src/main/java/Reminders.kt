@@ -75,6 +75,16 @@ object Reminders {
     private const val ESCALATION_MS = 120 * 60_000L
 
     /**
+     * La tolérance autour de la fin d'une plage horaire.
+     *
+     * Une alarme n'arrive jamais exactement à la milliseconde demandée. Sans marge, une
+     * relance qui tombe un cheveu trop tôt se juge « encore dans la plage » : elle se tait
+     * et se réarme sur l'instant qu'elle vient de manquer. Une minute, c'est en dessous de
+     * ce que quiconque remarque et au-dessus de ce que le système fait dériver.
+     */
+    private const val SLACK = 60_000L
+
+    /**
      * Les heures où une relance ne fait plus de bruit. 22h à 8h.
      *
      * Ça ne touche QUE les relances : la première sonnerie, celle de l'heure prévue,
@@ -190,10 +200,14 @@ object Reminders {
         // Le mot d'avance. Inexact et sans réveil : arriver à la minute près n'a aucune
         // importance quinze minutes avant, et ça ne justifie pas de sortir le téléphone
         // de veille.
+        //
+        // Et s'il n'y a plus lieu de le poser, on retire celui d'avant. Depuis que l'heure
+        // peut changer d'un jour à l'autre, reprogrammer laisse sinon derrière soi le mot
+        // d'avance de l'ancien horaire, qui arrive tout seul à une heure qui n'existe plus.
         val soon = slot - HEADSUP_MINUTES * 60_000L
-        if (soon > System.currentTimeMillis()) {
-            am.set(AlarmManager.RTC, soon, alarmPI(ctx, ACTION_SOON, med, slot))
-        }
+        val soonPI = alarmPI(ctx, ACTION_SOON, med, slot)
+        if (soon > System.currentTimeMillis()) am.set(AlarmManager.RTC, soon, soonPI)
+        else am.cancel(soonPI)
     }
 
     /**
@@ -350,9 +364,19 @@ object Reminders {
 
     private fun scheduleNag(ctx: Context, med: Medication, slot: Long, tier: Tier) {
         val now = System.currentTimeMillis()
-        val at =
-            if (tier == Tier.SERIEUX) Slots.dayAfter(Slots.dayOf(now)) + 60_000L
-            else now + med.nagEveryMinutes * 60_000L
+        val windowEnd = Slots.windowEnd(med, slot)
+        val at = when {
+            tier == Tier.SERIEUX -> Slots.dayAfter(Slots.dayOf(now)) + 60_000L
+            // Pendant la plage, la prochaine relance n'est pas dans dix minutes : c'est
+            // celle qui ouvre l'escalade, à la fin de la plage. Rien ne peut changer d'ici
+            // là, donc rien ne justifie de réveiller le téléphone dix-huit fois pour
+            // reposer le même mot.
+            //
+            // La minute de marge évite le seul cas dégénéré : une alarme qui arrive une
+            // poignée de millisecondes avant l'heure se réarmerait sur elle-même.
+            now + SLACK < windowEnd -> windowEnd
+            else -> now + med.nagEveryMinutes * 60_000L
+        }
         ctx.getSystemService(AlarmManager::class.java).setExactAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP, at, alarmPI(ctx, ACTION_NAG, med, slot)
         )
@@ -413,8 +437,10 @@ object Reminders {
     fun post(ctx: Context, med: Medication, slot: Long, alert: Alert): Tier {
         ensureChannels(ctx)
         val now = System.currentTimeMillis()
-        val lateMin = ((now - slot) / 60_000L).coerceAtLeast(0)
-        val (tier, line) = FloMessages.line(lateMin, slot, med.name)
+        val windowEnd = Slots.windowEnd(med, slot)
+        val elapsedMin = ((now - slot) / 60_000L).coerceAtLeast(0)
+        val pressureMin = Slots.pressureMinutes(med, slot, now)
+        val (tier, line) = FloMessages.line(elapsedMin, pressureMin, slot, med.name)
         val mood = tier.mood
         val vibe = NotifArt.vibeFor(tier)
 
@@ -422,9 +448,13 @@ object Reminders {
         // annoncer — l'escalade est finie, le dragon a dit ce qu'il avait à dire — et la
         // nuit, une relance sonore n'obtient rien qu'une app dont on coupe les
         // notifications. La notification, elle, reste posée dans les deux cas.
+        //
+        // Et pendant la plage horaire, rien non plus : le mot de 7h a sonné une fois, il
+        // est posé, il attend. Sonner encore à 7h10 quand la plage court jusqu'à 10h
+        // reviendrait à sonner pour dire ce qui est déjà à l'écran — à quelqu'un qui dort.
         val aloud = when (alert) {
             Alert.DUE -> true
-            Alert.NAG -> tier != Tier.SERIEUX && !quietHours(now)
+            Alert.NAG -> tier != Tier.SERIEUX && !quietHours(now) && now >= windowEnd - SLACK
             Alert.SILENT -> false
         }
 
@@ -461,7 +491,11 @@ object Reminders {
         // Deux heures, c'est le moment où le dragon cesse de plaisanter — une échéance
         // réelle, dont on voit la conséquence arriver. Une fois passée il n'y a plus rien
         // à décompter, alors l'horloge disparaît plutôt que de compter à l'envers.
-        val deadline = slot + ESCALATION_MS
+        //
+        // Tant que la plage court, c'est ELLE que l'horloge montre : « il te reste jusqu'à
+        // 10h » est la seule échéance qui existe vraiment à ce moment-là. L'échelle des
+        // deux heures ne commence qu'ensuite.
+        val deadline = if (now < windowEnd) windowEnd else windowEnd + ESCALATION_MS
         val counting = now < deadline
 
         val n = NotificationCompat.Builder(ctx, CHANNEL_NAG)

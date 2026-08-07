@@ -19,9 +19,12 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import com.example.medtap.Her
 import com.example.medtap.data.DayState
+import com.example.medtap.data.DayWindow
 import com.example.medtap.data.DoseLog
 import com.example.medtap.data.Medication
 import com.example.medtap.data.Slots
+import com.example.medtap.data.Week
+import com.example.medtap.data.windowOn
 import com.example.medtap.reminder.FloMessages
 import com.example.medtap.reminder.Tier
 import com.example.medtap.data.isManual
@@ -78,11 +81,27 @@ val HomeState.dressed: Set<String>
 
 private val clock = SimpleDateFormat("H'h'mm", Locale.CANADA_FRENCH)
 
-private fun Medication.timeLabel(): String = clock.format(
-    Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, hourOfDay); set(Calendar.MINUTE, minute)
-    }.time
+/** « 7h00 », à partir de minutes depuis minuit. */
+private fun hhmm(minuteOfDay: Int): String =
+    String.format(Locale.CANADA_FRENCH, "%dh%02d", minuteOfDay / 60, minuteOfDay % 60)
+
+/** La plage de [med] pour la journée de [now]. */
+private fun Medication.windowToday(now: Long): DayWindow = windowOn(
+    Week.index(Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.DAY_OF_WEEK))
 )
+
+/**
+ * L'heure d'aujourd'hui, avec sa plage quand il y en a une : « 7h00 → 10h00 ».
+ *
+ * Sur la journée en cours et pas sur `hourOfDay` : depuis que les heures peuvent différer
+ * d'un jour à l'autre, ce champ n'est plus l'heure du rappel mais la plus matinale de la
+ * semaine, et l'afficher tel quel annoncerait 7h un jeudi réglé à 10h.
+ */
+private fun Medication.timeLabel(now: Long = System.currentTimeMillis()): String {
+    val w = windowToday(now)
+    return if (w.instant) hhmm(w.startMinute)
+    else "${hhmm(w.startMinute)} → ${hhmm(w.endMinute)}"
+}
 
 @Composable
 fun HomeScreen(
@@ -133,8 +152,11 @@ fun HomeScreen(
         slot <= now && (med.tagId to Slots.dayOf(slot)) !in state.takenDays
     }
 
-    // How late is the most overdue thing? That drives the dragon's face.
-    val worstLateMin = owed.maxOfOrNull { (now - Slots.todayAt(it, now)) / 60_000L } ?: 0L
+    // How late is the most overdue thing? That drives the dragon's face. Le retard se
+    // compte à partir de la FIN de la plage horaire : entre 7h et 10h, une dose réglée sur
+    // cette plage n'est pas en retard, elle est dans son créneau.
+    val worstLateMin =
+        owed.maxOfOrNull { Slots.pressureMinutes(it, Slots.todayAt(it, now), now) } ?: 0L
     val mood = when {
         // Le mot du casier : elle le porte partout, pas seulement sur la page où il a
         // été dit. C'est ce qui en fait une réponse plutôt qu'un déverrouillage.
@@ -271,6 +293,10 @@ fun HomeScreen(
                 med = med,
                 taken = taken,
                 due = slot <= now,
+                // En retard veut dire « la plage est passée », pas « l'heure est passée ».
+                // Sans ça une dose réglée de 7h à 10h s'affiche en retard à 7h01, ce qui
+                // est précisément le reproche qu'on cherche à ne plus faire.
+                late = Slots.pressureMinutes(med, slot, now) > 0,
                 loggable = target != null,
                 // Passé minuit, le bouton note la dose d'HIER. Il doit le dire : un
                 // bouton qui enregistre autre chose que ce qu'on croit est pire qu'un
@@ -327,7 +353,9 @@ fun HomeScreen(
                         style = Type.Label, color = Pal.Muted
                     )
                     Spacer(Modifier.height(24.dp))
-                    DriftChart(points, "CIBLE ${med.timeLabel()}")
+                    // L'heure seule, sans la plage : le graphique trace l'écart au
+                    // créneau, et le créneau c'est le début.
+                    DriftChart(points, "CIBLE ${hhmm(med.windowToday(now).startMinute)}")
                 }
             }
         }
@@ -352,6 +380,7 @@ private fun MedRow(
     med: Medication,
     taken: Boolean,
     due: Boolean,
+    late: Boolean,
     loggable: Boolean,
     forYesterday: Boolean,
     log: DoseLog?,
@@ -389,6 +418,7 @@ private fun MedRow(
                     when {
                         log?.skipped == true -> "Sautée"
                         taken && log != null -> "Pris à ${clock.format(Date(log.takenAt))}"
+                        late -> "En retard"
                         due -> "À prendre"
                         else -> "Plus tard"
                     },

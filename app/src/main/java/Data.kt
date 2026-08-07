@@ -24,6 +24,21 @@ data class Medication(
     val nagEveryMinutes: Int = 10,      // how often the reminder re-announces itself
     val active: Boolean = true,
     /**
+     * Les sept plages de la semaine, lundi d'abord : `"début-fin,début-fin,…"` en minutes
+     * depuis minuit. Vide veut dire « la même heure tous les jours, sans plage », c'est-à-
+     * dire exactement [hourOfDay]:[minute] — le comportement d'avant, pour tout le monde
+     * qui existait avant ce champ.
+     *
+     * Un seul champ texte plutôt que sept colonnes, ou pire une table : ces sept valeurs
+     * ne sont jamais interrogées séparément, jamais triées, jamais jointes. Elles ne sont
+     * lues qu'ensemble et par le même code. Une table à part coûterait une migration, une
+     * requête et un risque d'orphelins pour ranger ce qui tient en trente caractères.
+     *
+     * [hourOfDay] et [minute] restent la plus matinale des sept — c'est ce qui trie la
+     * liste, et c'est le repli si jamais la chaîne devient illisible.
+     */
+    val schedule: String = "",
+    /**
      * Le jour où ce médicament est entré dans l'app.
      *
      * Sans lui, la série exigeait une dose de CHAQUE médicament actif pour CHAQUE jour
@@ -46,6 +61,87 @@ data class Medication(
 
 /** True when this medication has no NFC tag and is logged by hand. */
 val Medication.isManual: Boolean get() = tagId.startsWith(Medication.MANUAL_PREFIX)
+
+/**
+ * La semaine, toujours dans le même sens : lundi en tête, dimanche en queue.
+ *
+ * `Calendar.DAY_OF_WEEK` vaut 1 pour dimanche, ce qui met dimanche à gauche de tout ce
+ * qu'on affiche. La conversion vivait déjà en double dans `weekStatus` et dans `WeekDots` ;
+ * maintenant que les créneaux eux-mêmes en dépendent, un seul endroit doit la connaître.
+ */
+object Week {
+    const val DAYS = 7
+
+    /** 0 = lundi … 6 = dimanche, à partir d'un `Calendar.DAY_OF_WEEK`. */
+    fun index(dayOfWeek: Int): Int = (dayOfWeek + 5) % 7
+
+    val LETTERS = listOf("L", "M", "M", "J", "V", "S", "D")
+    val NAMES = listOf(
+        "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"
+    )
+}
+
+/**
+ * Une journée de la semaine : l'heure du rappel, et jusqu'à quand la dose reste « à
+ * l'heure ».
+ *
+ * La plage existe parce que l'heure du lever n'est pas la même tous les jours. Un rappel
+ * à 7h qui escalade dès 7h10 engueule quelqu'un qui dort encore, et un dragon qui a tort
+ * trois matins par semaine est un dragon qu'on finit par couper. Avec une plage 7h→10h,
+ * le mot part quand même à 7h — il sera là au réveil — mais rien ne monte d'un cran avant
+ * 10h, l'heure à laquelle elle est debout de toute façon.
+ *
+ * [endMinute] égal (ou inférieur) à [startMinute] veut dire « pas de plage » : l'escalade
+ * démarre à l'heure pile, comme avant.
+ */
+data class DayWindow(val startMinute: Int, val endMinute: Int) {
+    /** Vraie quand il n'y a aucune plage : le retard commence à la minute même. */
+    val instant: Boolean get() = endMinute <= startMinute
+}
+
+/**
+ * Les sept plages, toujours sept, quoi qu'il y ait dans [Medication.schedule].
+ *
+ * Toute chaîne qui n'a pas exactement la forme attendue retombe sur [Medication.hourOfDay]
+ * — une base à moitié écrite ou un fichier de sauvegarde bricolé à la main ne doit pas
+ * faire disparaître les rappels, il doit faire revenir l'ancien comportement.
+ */
+fun Medication.windows(): List<DayWindow> = List(Week.DAYS) { windowOn(it) }
+
+/** La plage du jour [dayIndex], 0 = lundi. */
+fun Medication.windowOn(dayIndex: Int): DayWindow {
+    val fallback = (hourOfDay * 60 + minute).let { DayWindow(it, it) }
+    if (schedule.isBlank()) return fallback
+    val parts = schedule.split(',')
+    if (parts.size != Week.DAYS) return fallback
+    val token = parts[dayIndex.coerceIn(0, Week.DAYS - 1)]
+    val dash = token.indexOf('-')
+    if (dash <= 0) return fallback
+    val start = token.substring(0, dash).trim().toIntOrNull() ?: return fallback
+    val end = token.substring(dash + 1).trim().toIntOrNull() ?: return fallback
+    if (start !in 0..1439 || end !in 0..1439) return fallback
+    return DayWindow(start, end)
+}
+
+/** Vraie quand les sept jours ont exactement la même plage : le cas de presque tout le monde. */
+val Medication.uniformWeek: Boolean get() = windows().distinct().size == 1
+
+/**
+ * Le même médicament avec ces sept plages.
+ *
+ * [Medication.hourOfDay] suit la plus matinale des sept. Ce n'est plus l'heure du rappel —
+ * c'est [Slots] qui la connaît maintenant — mais c'est encore ce qui trie la liste, et
+ * surtout c'est le repli le jour où la chaîne ne se relit pas.
+ */
+fun Medication.withWindows(week: List<DayWindow>): Medication {
+    if (week.size != Week.DAYS) return this
+    val earliest = week.minOf { it.startMinute }
+    return copy(
+        hourOfDay = earliest / 60,
+        minute = earliest % 60,
+        schedule = week.joinToString(",") { "${it.startMinute}-${it.endMinute}" }
+    )
+}
 
 /** A dose that was actually taken. scheduledFor identifies which slot it satisfies. */
 @Entity(
@@ -234,9 +330,9 @@ suspend fun MedDao.weekStatus(
     meds: List<Medication>,
     now: Long = System.currentTimeMillis()
 ): List<DayState> {
-    // DAY_OF_WEEK vaut 1 pour dimanche : ce décalage remet lundi en tête.
-    val todayIdx = (Calendar.getInstance().apply { timeInMillis = now }
-        .get(Calendar.DAY_OF_WEEK) + 5) % 7
+    val todayIdx = Week.index(
+        Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.DAY_OF_WEEK)
+    )
     val frozen = freezeDays().toSet()
     return (0..6).map { i ->
         val back = todayIdx - i
@@ -314,30 +410,31 @@ suspend fun MedDao.currentStreak(
  * Le gel n'est posé que s'il y avait quelque chose à protéger : geler avant-hier quand la
  * série était déjà morte gaspillerait le seul de la semaine pour rien.
  */
-suspend fun MedDao.useFreezeIfNeeded(): Boolean {
+suspend fun MedDao.useFreezeIfNeeded(now: Long = System.currentTimeMillis()): Boolean {
     val meds = activeMedsOnce()
     if (meds.isEmpty()) return false
 
     // Sur la même base que la série : un médicament ajouté aujourd'hui n'a pas « manqué »
     // hier, et ne doit donc pas déclencher un gel — il n'y a rien à protéger.
-    val yesterday = Slots.dayStart(1)
+    val yesterday = Slots.dayStart(1, now)
     if (freezeFor(yesterday) != null) return false
     val dueYesterday = meds.dueOn(yesterday)
     if (dueYesterday.isEmpty()) return false
-    if (dueYesterday.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 1)) != null }) return false
+    if (dueYesterday.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 1, now)) != null })
+        return false
 
-    val dayBefore = Slots.dayStart(2)
+    val dayBefore = Slots.dayStart(2, now)
     val dueBefore = meds.dueOn(dayBefore)
     val hadStreak =
         (dueBefore.isNotEmpty() &&
-            dueBefore.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 2)) != null }) ||
+            dueBefore.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 2, now)) != null }) ||
             dayBefore in freezeDays().toSet()
     if (!hadStreak) return false
 
-    val week = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+    val week = now - 7L * 24 * 60 * 60 * 1000
     if (freezesSince(week).isNotEmpty()) return false
 
-    insertFreeze(StreakFreeze(yesterday, System.currentTimeMillis()))
+    insertFreeze(StreakFreeze(yesterday, now))
     return true
 }
 
@@ -445,12 +542,26 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/**
+ * Version 6 : les sept plages de la semaine.
+ *
+ * La chaîne vide est le choix qui ne change rien — c'est « la même heure tous les jours,
+ * sans plage », donc exactement [hourOfDay]:[minute] et exactement l'escalade d'avant.
+ * Personne ne voit sa journée bouger d'une minute en installant la mise à jour, et la
+ * fonctionnalité n'existe que pour qui va la régler.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE Medication ADD COLUMN schedule TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 @Database(
     entities = [
         Medication::class, DoseLog::class, OwnedCosmetic::class,
         StreakFreeze::class, ReminderPost::class
     ],
-    version = 5, exportSchema = false
+    version = 6, exportSchema = false
 )
 abstract class Db : RoomDatabase() {
     abstract fun dao(): MedDao
@@ -459,7 +570,9 @@ abstract class Db : RoomDatabase() {
         @Volatile private var instance: Db? = null
         fun get(ctx: Context): Db = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "medtap.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6
+                )
                 .build().also { instance = it }
         }
     }
@@ -479,22 +592,44 @@ object Slots {
     /** How early a dose may be logged before it's actually due. */
     const val EARLY_WINDOW = 2 * 60 * 60 * 1000L
 
-    private fun atTimeOn(med: Medication, base: Long) = Calendar.getInstance().apply {
+    /**
+     * L'heure du rappel appliquée à la JOURNÉE de [base], selon le jour de semaine de
+     * cette journée-là.
+     *
+     * Le jour de semaine se lit avant que l'heure soit posée, et sur le bon jour. C'est
+     * tout le piège des horaires variables : la version évidente — poser l'heure
+     * d'aujourd'hui puis reculer de trois jours — donne l'heure du mardi au créneau du
+     * samedi, donc plus aucune dose ne se retrouve et la série s'effondre.
+     */
+    private fun startOn(med: Medication, base: Long) = Calendar.getInstance().apply {
         timeInMillis = base
-        set(Calendar.HOUR_OF_DAY, med.hourOfDay)
-        set(Calendar.MINUTE, med.minute)
+        val w = med.windowOn(Week.index(get(Calendar.DAY_OF_WEEK)))
+        set(Calendar.HOUR_OF_DAY, w.startMinute / 60)
+        set(Calendar.MINUTE, w.startMinute % 60)
         set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }
 
+    /**
+     * Le prochain créneau strictement après [from].
+     *
+     * On avance jour par jour au lieu d'ajouter vingt-quatre heures : avec des heures
+     * différentes selon les jours, « demain à la même heure » n'existe pas. Huit essais
+     * couvrent la semaine entière plus le jour de départ, donc la boucle se termine
+     * toujours — même si les sept jours tombaient à minuit pile.
+     */
     fun nextAfter(med: Medication, from: Long = System.currentTimeMillis()): Long {
-        val c = atTimeOn(med, from)
-        if (c.timeInMillis <= from) c.add(Calendar.DAY_OF_YEAR, 1)
-        return c.timeInMillis
+        val probe = Calendar.getInstance().apply { timeInMillis = from }
+        repeat(Week.DAYS + 1) {
+            val slot = startOn(med, probe.timeInMillis).timeInMillis
+            if (slot > from) return slot
+            probe.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        return startOn(med, probe.timeInMillis).timeInMillis
     }
 
     /** Today's dose time, whether or not it has already passed. */
     fun todayAt(med: Medication, now: Long = System.currentTimeMillis()): Long =
-        atTimeOn(med, now).timeInMillis
+        startOn(med, now).timeInMillis
 
     /**
      * The same medication's slot [days] days ago.
@@ -503,9 +638,48 @@ object Slots {
      * stored as local wall-clock times. On the two DST changeovers a day is 23 or 25
      * hours long, so millisecond arithmetic lands an hour off, finds no log, and silently
      * resets a streak of any length back to one. Twice a year, invisibly.
+     *
+     * Le recul se fait AVANT que l'heure soit posée, pour que ce soit bien l'heure de ce
+     * jour-là de la semaine qui s'applique.
      */
-    fun slotDaysAgo(med: Medication, days: Int, now: Long = System.currentTimeMillis()): Long =
-        atTimeOn(med, now).apply { add(Calendar.DAY_OF_YEAR, -days) }.timeInMillis
+    fun slotDaysAgo(med: Medication, days: Int, now: Long = System.currentTimeMillis()): Long {
+        val day = Calendar.getInstance().apply {
+            timeInMillis = now
+            add(Calendar.DAY_OF_YEAR, -days)
+        }.timeInMillis
+        return startOn(med, day).timeInMillis
+    }
+
+    /**
+     * L'instant où la plage se referme et où le dragon a le droit de monter le ton.
+     *
+     * Égal au créneau lui-même quand aucune plage n'est réglée, ce qui est le cas de tous
+     * les médicaments d'avant cette fonctionnalité : ils escaladent exactement comme
+     * avant, à la minute près.
+     */
+    fun windowEnd(med: Medication, slot: Long): Long {
+        val c = Calendar.getInstance().apply { timeInMillis = slot }
+        val w = med.windowOn(Week.index(c.get(Calendar.DAY_OF_WEEK)))
+        if (w.instant) return slot
+        c.set(Calendar.HOUR_OF_DAY, w.endMinute / 60)
+        c.set(Calendar.MINUTE, w.endMinute % 60)
+        c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
+        return maxOf(c.timeInMillis, slot)
+    }
+
+    /**
+     * Les minutes de retard qui COMPTENT, c'est-à-dire celles d'après la plage.
+     *
+     * C'est le seul nombre que [Tier] a le droit de voir. Le temps écoulé depuis le
+     * créneau sert encore à faire varier le texte d'une relance à l'autre, mais il ne
+     * décide plus de rien : un médicament réglé de 7h à 10h a zéro minute de retard à
+     * 9h59, quoi qu'en dise l'horloge.
+     */
+    fun pressureMinutes(
+        med: Medication,
+        slot: Long,
+        now: Long = System.currentTimeMillis()
+    ): Long = ((now - windowEnd(med, slot)) / 60_000L).coerceAtLeast(0)
 
     /** Minuit du jour situé [daysAgo] jours en arrière. */
     fun dayStart(daysAgo: Int, now: Long = System.currentTimeMillis()): Long =

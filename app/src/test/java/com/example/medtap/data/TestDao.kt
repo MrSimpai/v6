@@ -93,22 +93,52 @@ object T {
         tagId: String = "A",
         hour: Int = 9,
         minute: Int = 0,
-        createdAt: Long = 0L
+        createdAt: Long = 0L,
+        schedule: String = ""
     ) = Medication(
         tagId = tagId, name = tagId, doseText = "1", hourOfDay = hour, minute = minute,
-        createdAt = createdAt
+        schedule = schedule, createdAt = createdAt
     )
 
-    /** Une dose notée pour le créneau de [med] le jour donné. */
-    fun dose(med: Medication, year: Int, month: Int, day: Int) = DoseLog(
-        tagId = med.tagId,
-        scheduledFor = at(year, month, day, med.hourOfDay, med.minute),
-        takenAt = at(year, month, day, med.hourOfDay, med.minute)
-    )
+    /**
+     * Un médicament dont chaque jour de la semaine a sa propre heure, lundi d'abord.
+     *
+     * Les heures s'écrivent en minutes depuis minuit, comme en base, mais les tests les
+     * donnent en heures pleines : `week(7, 7, 7, 10, 7, 9, 9)` se lit à voix haute.
+     */
+    fun weekly(
+        tagId: String = "A",
+        hours: List<Int>,
+        until: List<Int> = emptyList(),
+        createdAt: Long = 0L
+    ): Medication {
+        val schedule = hours.indices.joinToString(",") { i ->
+            val start = hours[i] * 60
+            val end = if (i < until.size) until[i] * 60 else start
+            "$start-$end"
+        }
+        return med(tagId, hours.min(), 0, createdAt, schedule)
+    }
+
+    /**
+     * Une dose notée pour le créneau de [med] le jour donné.
+     *
+     * Le créneau est demandé à [Slots] plutôt que reconstruit à la main : depuis que
+     * l'heure dépend du jour de la semaine, « l'heure de ce médicament » n'est plus une
+     * valeur mais une question, et le test doit poser exactement la même que l'app.
+     */
+    fun dose(med: Medication, year: Int, month: Int, day: Int): DoseLog {
+        val slot = slot(med, year, month, day)
+        return DoseLog(tagId = med.tagId, scheduledFor = slot, takenAt = slot)
+    }
+
+    /** Le créneau de [med] ce jour-là. */
+    fun slot(med: Medication, year: Int, month: Int, day: Int): Long =
+        Slots.todayAt(med, at(year, month, day, 12, 0))
 
     /** La trace d'un rappel effectivement posé pour le créneau de [med] ce jour-là. */
     fun told(med: Medication, year: Int, month: Int, day: Int): ReminderPost {
-        val slot = at(year, month, day, med.hourOfDay, med.minute)
-        return ReminderPost(med.tagId, slot, slot)
+        val s = slot(med, year, month, day)
+        return ReminderPost(med.tagId, s, s)
     }
 }

@@ -45,6 +45,11 @@ rung further up:
 | 60–120 | `CULPABILITE` | peine d'amour théâtrale | *"Ça ne marche pas, ces rappels — Je blague, je n'arrêterai jamais. Prends ta dose, Flo."* |
 | 120+ | `SERIEUX` | neutre, aucun surnom | *"Florie — ta médication. La dose d'aujourd'hui a plus de deux heures de retard…"* |
 
+"Retard" here means minutes past the **end** of the medication's window, not past the
+reminder — see [the window](#different-hours-on-different-days-and-the-morning-window).
+With no window set the two are the same thing, which is the case for every medication
+created before the feature existed.
+
 That last tier is the point of the first four. Nicknames, emoji and bits all disappear,
 the banner goes dark plum, and the dragon uses her actual name — `Her.realName`, which
 appears nowhere else in the app. If everything were equally silly, nothing would register
@@ -52,6 +57,77 @@ as urgent. Edit any of it in `FloMessages.kt` — it's just five lists of string
 
 The register shift is doing as much work as the wording: the first four tiers are
 familiar and contracted, `SERIEUX` is plain, unhurried standard French.
+
+### The lines are dealt, not drawn
+
+Reported from actual use: *"je reçois souvent PILL PILL PILLLL"*. Nothing was broken —
+every re-post drew from its tier's list, honestly and independently. That was the bug.
+
+`DRAME` lasts an hour and the nag comes back every ten minutes, so it's **six draws from
+nine lines, every single day**. The arithmetic is unkind:
+
+| | |
+|---|---|
+| At least one line repeating inside that hour | **89 %** |
+| One given line — say *PILL PILL PILLLL!* — showing up that day | **51 %** |
+
+Three or four sightings a week, from a generator doing exactly what it was asked. What you
+want from a mascot that talks every day isn't unpredictability, it's *not repeating
+itself* — those are different things, and only one of them is what random means.
+
+So the tier's list is now **shuffled once for the day** and the nag counter walks it:
+`order[nagIndex % size]`. Six consecutive nags land on six consecutive positions, so they
+cannot collide — guaranteed by modular arithmetic, not by luck. Tomorrow the shuffle is
+different.
+
+The same applies to every list that speaks once a day. `early` (6 lines) and `celebration`
+(25) deal out the whole catalogue before anything comes back, reshuffling each time round.
+The one repeat a plain reshuffle still allows is at the **seam** — the last line of one
+round being the first of the next, which is precisely the two-days-in-a-row case anyone
+would notice. One swap of positions 0 and 1 removes it, and swapping rather than
+reshuffling keeps the round complete.
+
+Seeds are multiplied by a large odd constant before use. Consecutive days differ by only
+1440 minutes, and nothing obliges a generator seeded on two neighbouring numbers to head in
+two different directions; the multiplication is bijective, so it loses nothing and just
+spreads that small gap across every bit first.
+
+## Different hours on different days, and the morning window
+
+She does not get up at the same time every day. Monday she is up at 7; Thursday she
+sleeps until 10. A ladder that starts climbing at 7h10 is a dragon that is *wrong three
+mornings a week*, and a reminder that is regularly wrong is a reminder you turn off. That
+ends the app, quietly and permanently.
+
+So two settings, and they solve the same problem from two directions:
+
+- **An hour per weekday.** Seven windows, Monday first, stored in `Medication.schedule` as
+  `"début-fin,…"` in minutes since midnight. Blank means "same hour every day", which is
+  exactly `hourOfDay`:`minute` — the behaviour everyone had before, so the update moves
+  nobody's day by a minute.
+- **A window instead of an instant.** *7h → 10h* means the reminder still posts at 7h — it
+  will be there when she wakes — but nothing escalates, re-rings or changes tone until 10h.
+
+`Slots.pressureMinutes` is the only number `Tier` is allowed to see: minutes past the
+**end** of the window, zero for the whole width of it. The real elapsed time still exists
+and still varies the wording, so a three-hour window doesn't serve the same sentence three
+times; it just no longer decides anything. During the window `scheduleNag` arms exactly
+one alarm — the one at the closing edge — instead of waking the phone every ten minutes to
+re-post a message that cannot change. The notification's chronometer counts down to 10h
+while the window is open, and to the top of the ladder afterwards.
+
+The trap the whole feature turns on is `Slots.slotDaysAgo`: it has to step back to the
+target day **first** and read that day's hour **second**. The obvious version — stamp
+today's hour, then subtract three days — looks for Saturday's dose at Tuesday's hour,
+finds nothing, and drops a streak of any length to one the day someone sets a per-day
+schedule. `nextAfter` walks forward a day at a time for the same reason: "tomorrow at the
+same time" no longer exists.
+
+The editing screen keeps it to one switch. Off, one pair of time rows applies to all seven
+days. On, a row of seven pills — L M M J V S D, each showing its own hour — picks the day
+being edited, with *"apply Thursday to all seven days"* underneath. Turning the switch back
+off flattens the week onto the day on screen rather than leaving the database saying one
+thing while the screen says another.
 
 ## What makes the notification feel like Duolingo's
 
@@ -106,6 +182,25 @@ soft halo behind the dragon's head, three sparkles. A solid fill can only ever b
 fill, and it sat on her home screen all day looking like exactly that. Nothing finer than a
 sparkle goes in — some launchers render the icon at 48dp, and any smaller detail turns to
 grime at that size.
+
+### The status bar icon is the head, and nothing else
+
+`ic_stat_dragon` used to be the whole dragon, and it was also the `<monochrome>` layer of
+all five launcher icons. Both jobs at once meant obeying the stricter of the two
+constraints: an adaptive icon is cut by a mask that only guarantees the middle 72 of 108,
+so the drawing stayed small — and in a status bar, where Android keeps nothing but the
+silhouette in flat white, that left a six-pixel head on top of a body, legs and tail that
+merged into one lump.
+
+They're two files now. `ic_dragon_mono` keeps the full silhouette at the safe size for the
+launcher; `ic_stat_dragon` is the **head alone**, filling the frame — 100 units wide
+instead of 59, about 1.7× in each direction. The eyes are *punched out* of the silhouette
+rather than drawn on it: one path with `fillType="evenOdd"`, so the inner subpaths become
+holes, and since Android keeps only the alpha the holes show the status bar through. It's
+what stops the shape from being a blob.
+
+The horns stay. Without them the head is a circle and could be anything; they're what makes
+the notification recognisable before it's read.
 
 ### The icon can't wear the outfit — the shortcut can
 
@@ -337,9 +432,10 @@ for that medication unfindable: streak back to one, week dots emptied, drift cha
 with the rows still sitting untouched in the database. Editing the time is one of the
 first things anyone does after installing, which made it a first-week bug.
 
-The schema holds one time per medication, so "that medication, that day" always names
-exactly one dose. `driftMinutes` still reads the stored `scheduledFor`, so how late you
-actually were stays true even after the reminder moves.
+The schema holds one time per medication *per weekday*, so "that medication, that day"
+always names exactly one dose. `driftMinutes` still reads the stored `scheduledFor`, so
+how late you actually were stays true even after the reminder moves — and that is what
+lets a medication switch from a single hour to a per-day schedule without losing a thing.
 
 ### The pill you took at 00:30 last night
 
@@ -670,6 +766,10 @@ Restore is **additive**. Nothing is deleted, everything is merged. A restore tha
 emptying the database is a restore that destroys what it was meant to save when the file
 turns out to be wrong.
 
+The file carries a version — 3 since the seven weekday windows joined it — and every field
+is read with a default, so an older file restores as the thing it described. A backup with
+no `schedule` comes back as "same hour every day", which is precisely what it meant.
+
 ## The widget
 
 Three bands, like a Duolingo tile: a status bar (streak flame left, the week's seven dots
@@ -703,8 +803,37 @@ Today's dot is now a gold ring rather than merely a larger white circle, so it's
 colour instead of by comparing diameters.
 
 Both are also drawn at roughly triple their on-screen size (96px pill, 320×48 week) and
-scaled down, because a 24dp pill rasterised at 56px is visibly soft on a 3x screen. The
-whole `RemoteViews` payload is still about 660 KB, well inside the 1 MB Binder ceiling.
+scaled down, because a 24dp pill rasterised at 56px is visibly soft on a 3x screen.
+
+### Resizing, and why the background is measured per tile
+
+The tile is resizable, and the background used to be a **square** bitmap stretched with
+`fitXY`. On a 2×2 that's invisible. Resize it and the rounded corners become ellipses, the
+sun an oval, and the scale texture a field of diamonds.
+
+So each widget is now measured individually — `measure()` reads
+`OPTION_APPWIDGET_MIN_WIDTH` / `MAX_HEIGHT` from that tile's own options — and the scene is
+painted at its real proportions. Nothing is left to stretch. Only the background is
+per-tile; the dragon, the week and the streak pill don't depend on shape, so they're drawn
+once and shared across every widget on the screen.
+
+Three things fall out of that:
+
+- **`onAppWidgetOptionsChanged` redraws on resize.** Without it the old, wrongly-shaped
+  background stayed until the next 30-minute tick, which was long enough to look like the
+  intended appearance rather than a glitch.
+- **The corner radius is capped at 20dp.** A flat 14% of the short side gives a sensible
+  15dp on a 2×2 and a preposterous 46dp on a 4×4 — the large tile would render as a
+  lozenge. It's computed on the real tile and then scaled to the bitmap, not the reverse.
+- **The dragon grows with the tile** on Android 12+, via `setViewLayoutWidth/Height`, at
+  30% of the height clamped to 42–80dp. XML can't express this: a dp is a dp on a 2×2 and
+  on a 4×4 alike. Below API 31 it keeps the XML size, exactly as before. The footer row is
+  `wrap_content` so a grown dragon isn't clipped.
+
+The background is capped at 320px on its long side, because a 4×4 tile on a 3x screen would
+otherwise be a 4 MB bitmap and the widget would vanish silently. It's gradients and
+sparkles — upscaling doesn't show. Worst case the whole `RemoteViews` payload is about
+**774 KB**, 74% of the 1 MB Binder ceiling.
 
 ### The background escalates, and it knows what time it is
 
@@ -842,16 +971,42 @@ comment and never once executed:
 | `un rappel jamais parti est signale` | the Samsung silent failure going unnoticed |
 | `une dose prise en avance n est pas une panne` | early doses being reported as breakage |
 | `une dose oubliee apres un rappel n est pas une panne` | the app confessing to someone else's forgetting |
+| `slotDaysAgo prend l heure du jour vise` | the per-day schedule looking up Saturday's dose at Tuesday's hour |
+| `nextAfter trouve l heure du lendemain` | "tomorrow at the same time" when tomorrow has a different time |
+| `passer a un horaire par jour garde l historique` | switching to per-day hours wiping the streak |
+| `aucun retard tant que la plage court` | the ladder climbing while she's still asleep |
+| `l escalade compte a partir de la fin de la plage` | a window silencing the ladder for good instead of delaying it |
+| `sans plage rien ne change` | the update moving the day of every medication that predates it |
+| `un horaire illisible retombe sur l ancienne heure` | a half-written schedule string making reminders disappear |
+| `un jour manque avec une serie en cours est gele` | the freeze not firing on the day it exists for |
+| `sans serie a proteger aucun gel` | spending the week's only freeze on a streak already dead |
+| `un seul gel par semaine` / `un gel de plus d une semaine ne bloque plus` | the freeze becoming free, or never recharging |
+| `deux appels de suite ne consomment qu un gel` | two app openings in one morning burning two freezes |
+| `le jour gele se voit dans la semaine` | `DayState.FROZEN`, which nothing ever asserted |
+| `une heure de relances ne repete aucune ligne` | the reported *PILL PILL PILLLL* problem |
+| `aucun palier ne repete une ligne dans sa duree` | the same, on the four other tiers |
+| `le mot d avance defile sans se repeter` / `la felicitation defile sur tout le catalogue` | the once-a-day lists dealing the same card twice |
+| `remettre le rappel en place ne change pas le texte` | swiping a reminder away making the dragon appear to say something new |
+| `deux medicaments ne disent pas la meme chose` | two pills echoing each other word for word |
 
 `TimeZone` is pinned to `America/Montreal` in `@Before`, otherwise the DST tests would
 pass or fail depending on which machine ran them. `T.at(2025, 6, 3, 21, 0)` builds the
 dates so a test reads out loud — one you can't read is one you can't fix the day it
-breaks. `perfectDayStreak`, `weekStatus` and `currentStreak` all take an optional `now`
-purely so tests can choose what day it is; every caller keeps the default.
+breaks. `perfectDayStreak`, `weekStatus`, `currentStreak` and `useFreezeIfNeeded` all take
+an optional `now` purely so tests can choose what day it is; every caller keeps the
+default.
+
+The freeze was the last piece of the streak with no coverage at all, which is the worst
+place to have none: nothing appears on screen, nobody presses anything, and the only
+moment you'd discover it was broken is the morning a real streak died. `FreezeTest` pins
+both directions — it has to forgive the day it exists for, and refuse the six others.
 
 ## Still to add
 
-- Multiple daily slots per medication (the schema holds one time per med today)
+- Multiple daily slots per medication (the schema holds one time per weekday today, but
+  still only one)
+- Days off — a medication taken Monday/Wednesday/Friday only. The seven windows are the
+  right place for it, but every day currently counts against the streak
 - Linking a sticker to a medication that was created without one
 - Editing or deleting a medication
 - More cosmetics (the catalogue is built to take them)

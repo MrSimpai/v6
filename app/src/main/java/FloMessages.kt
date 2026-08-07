@@ -45,6 +45,59 @@ data class FloLine(val title: String, val body: String = "")
 
 object FloMessages {
 
+    /** L'ordre de la liste pour un tour donné. Toujours le même pour un tour donné. */
+    private fun <T> List<T>.orderFor(round: Long, variant: Long): List<T> =
+        shuffled(Random(round * 2654435761L + variant))
+
+    /**
+     * L'élément numéro [day] d'un défilé sans répétition.
+     *
+     * Toutes les listes de ce fichier sortaient leur ligne par un tirage indépendant. Ça
+     * paraît juste et ça ne l'est pas : tirer une fois par jour dans six lignes redonne
+     * celle de la veille une fois sur six, et il suffit de deux semaines pour que ça se
+     * remarque. Ce qu'on veut d'une mascotte qui parle tous les jours, ce n'est pas de
+     * l'imprévisibilité — c'est de ne pas radoter.
+     *
+     * Donc la liste entière défile avant qu'une ligne revienne, et elle est rebattue à
+     * chaque tour pour que l'ordre du tour suivant ne soit pas celui du précédent.
+     *
+     * [variant] sépare deux appelants du MÊME jour — deux médicaments, typiquement — qui
+     * tomberaient sinon mot pour mot sur la même phrase. Il n'entre que dans le brassage,
+     * jamais dans la position : le défilé reste donc complet pour chacun d'eux.
+     */
+    private fun <T> List<T>.onDay(day: Long, variant: Long = 0L): T {
+        if (size <= 1) return first()
+        val round = Math.floorDiv(day, size.toLong())
+        val position = Math.floorMod(day, size.toLong()).toInt()
+        val order = orderFor(round, variant).toMutableList()
+
+        // La couture entre deux tours.
+        //
+        // Un tour se termine, le suivant est rebattu, et rien n'empêche sa première ligne
+        // d'être celle qui vient de passer. C'est la seule répétition que le défilé laisse
+        // encore arriver, et c'est de loin la plus voyante — deux jours de suite, mot pour
+        // mot. Un échange la règle, et échanger plutôt que rebrasser garde le défilé
+        // entier : ce sont les mêmes lignes, dans un ordre à peine différent.
+        //
+        // L'échange ne touche que les positions 0 et 1, donc la dernière ligne d'un tour
+        // n'est jamais celle qu'il déplace : la comparaison ci-dessous porte bel et bien
+        // sur ce qui a été servi hier. (Vrai dès trois éléments, ce que sont toutes les
+        // listes d'ici.)
+        if (size >= 3) {
+            val hier = orderFor(round - 1, variant).last()
+            if (order[0] == hier) {
+                val t = order[0]; order[0] = order[1]; order[1] = t
+            }
+        }
+        return order[position]
+    }
+
+    /** Le jour d'un créneau. Il change une fois par jour, c'est tout ce qu'on lui demande. */
+    private fun dayOf(slot: Long): Long = Math.floorDiv(slot, 86_400_000L)
+
+    /** L'heure d'un créneau, en minutes : ce qui distingue la pilule du matin de celle du soir. */
+    private fun timeOf(slot: Long): Long = Math.floorMod(slot, 86_400_000L) / 60_000L
+
     /**
      * Avant l'heure, pas après. Tout le reste de l'échelle réagit à un retard ; ces
      * lignes-là arrivent quand il n'y a encore rien à se reprocher, donc elles sont
@@ -59,8 +112,11 @@ object FloMessages {
         FloLine("${Her.dragon} s'étire", "Elle se prépare. Toi aussi, tantôt.")
     )
 
-    /** La ligne du rappel anticipé, semée sur le créneau pour ne pas changer à chaque pose. */
-    fun early(slot: Long): FloLine = AVANCE[Random(slot / 60000).nextInt(AVANCE.size)]
+    /**
+     * La ligne du rappel anticipé. Six lignes, une par jour : elle défile, sinon celle
+     * d'hier revient une fois sur six.
+     */
+    fun early(slot: Long): FloLine = AVANCE.onDay(dayOf(slot), timeOf(slot))
 
     private val PONCTUEL = listOf(
         FloLine("C'est l'heure 💊", "${Her.dragon} a préparé ta petite dose, ${Her.name}."),
@@ -174,14 +230,50 @@ object FloMessages {
     }
 
     /**
-     * Semé sur le créneau plus le nombre de relances, pour que chaque relance dise autre
-     * chose, mais qu'un simple rappel remis en place ne rebrasse pas le texte.
+     * La graine d'une journée, brassée avant de servir.
+     *
+     * Deux créneaux d'un jour à l'autre ne diffèrent que de 1440 minutes, et rien n'oblige
+     * un générateur semé sur deux nombres voisins à partir dans deux directions
+     * différentes. La multiplication par un grand nombre impair est bijective : elle ne
+     * perd rien, elle ne fait qu'étaler ce petit écart sur tous les bits avant qu'il
+     * décide de quoi que ce soit.
      */
-    fun line(minutesLate: Long, slot: Long, medName: String): Pair<Tier, FloLine> {
-        val tier = Tier.forLateness(minutesLate)
-        val p = pool(tier)
-        val nagIndex = (minutesLate / 10).coerceAtLeast(0)
-        val picked = p[Random(slot / 60000 + nagIndex * 7919).nextInt(p.size)]
+    private fun daySeed(slot: Long): Long = (slot / 60_000L) * 2654435761L
+
+    /**
+     * La ligne du palier, tirée SANS REMISE.
+     *
+     * C'était un tirage indépendant à chaque relance, et c'est précisément ce qui donnait
+     * l'impression que le dragon radote. Le palier `DRAME` dure une heure, la relance
+     * revient toutes les dix minutes : ça fait six tirages dans neuf lignes, tous les
+     * jours. La probabilité qu'au moins une ligne sorte deux fois dans la même heure est
+     * de 89 %, et celle qu'une ligne donnée — « PILL PILL PILLLL! », disons — apparaisse
+     * dans la journée est de 51 %. Le hasard faisait exactement son travail ; c'est le
+     * hasard lui-même qui était le mauvais outil.
+     *
+     * Maintenant la liste du palier est battue une fois pour la journée et [nagIndex] la
+     * parcourt. Neuf relances passent donc par les neuf lignes avant qu'une seule revienne,
+     * et l'ordre est différent le lendemain. Ce n'est pas « plus aléatoire », c'est moins :
+     * ce qu'on veut d'un dragon qui parle, ce n'est pas de l'imprévisibilité, c'est de ne
+     * pas se répéter.
+     *
+     * Deux nombres, et ils ne servent pas à la même chose. [pressureMin] est le retard qui
+     * compte — celui d'après la plage horaire — et lui seul décide du palier : c'est ce qui
+     * empêche le dragon de crier sur quelqu'un qui n'est pas encore levé. [elapsedMin] est
+     * le temps réellement écoulé depuis le créneau ; il ne fait qu'avancer dans la liste,
+     * et comme il avance par tranches de dix minutes, un rappel simplement remis en place
+     * après un balayage retombe sur la même ligne au lieu de rebrasser le texte.
+     */
+    fun line(
+        elapsedMin: Long,
+        pressureMin: Long,
+        slot: Long,
+        medName: String
+    ): Pair<Tier, FloLine> {
+        val tier = Tier.forLateness(pressureMin)
+        val order = pool(tier).shuffled(Random(daySeed(slot)))
+        val nagIndex = (elapsedMin / 10).coerceAtLeast(0)
+        val picked = order[(nagIndex % order.size).toInt()]
         val body = if (tier == Tier.SERIEUX && picked.body.isNotBlank())
             "$medName — ${picked.body}" else picked.body
         return tier to FloLine(picked.title, body)
@@ -193,7 +285,7 @@ object FloMessages {
      * elles se feraient brûler par un médicament pris trois fois par jour.
      */
     fun celebration(streak: Int, seed: Long): FloLine {
-        val title = PRIS[Random(seed).nextInt(PRIS.size)]
+        val title = PRIS.onDay(dayOf(seed), timeOf(seed))
         val body = when {
             streak <= 1 -> "Enregistré."
             streak < 7  -> "$streak jours de suite pour celui-là."
@@ -319,5 +411,5 @@ object FloMessages {
 
 
     fun comeback(seed: Long = System.currentTimeMillis()): FloLine =
-        RETOUR[Random(seed).nextInt(RETOUR.size)]
+        RETOUR.onDay(dayOf(seed), timeOf(seed))
 }

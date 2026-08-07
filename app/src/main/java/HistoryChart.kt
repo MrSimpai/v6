@@ -36,6 +36,11 @@ fun buildDays(med: Medication, logs: List<DoseLog>, days: Int = 14): List<DayPoi
         .associateBy { Slots.dayOf(it.scheduledFor) }
     val today = Slots.todayAt(med)
     val names = arrayOf("D", "L", "M", "M", "J", "V", "S")
+    // Les jours d'avant l'arrivée du médicament ne sont pas des jours manqués : rien
+    // n'était attendu d'eux. La série le sait déjà (voir `dueOn`), mais la bande et le
+    // graphique, eux, les dessinaient en ronds creux et annonçaient « 3 jours sur 14 » à
+    // quelqu'un qui n'en avait jamais raté un seul.
+    val born = Slots.dayOf(med.createdAt)
     return (days - 1 downTo 0).map { back ->
         val c = Calendar.getInstance().apply {
             timeInMillis = today; add(Calendar.DAY_OF_YEAR, -back)
@@ -45,7 +50,7 @@ fun buildDays(med: Medication, logs: List<DoseLog>, days: Int = 14): List<DayPoi
             c.timeInMillis,
             byDay[Slots.dayOf(c.timeInMillis)]
         )
-    }
+    }.filter { Slots.dayOf(it.slot) >= born }
 }
 
 /**
