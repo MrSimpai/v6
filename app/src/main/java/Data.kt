@@ -736,7 +736,19 @@ object Slots {
         val today = todayAt(med, now)
         if (now >= today - EARLY_WINDOW) out += today
         val yesterday = slotDaysAgo(med, 1, now)
-        if (now - yesterday in 0..LATE_WINDOW) out += yesterday
+        // La deuxième condition ferme un piège du tout premier jour. Un médicament du soir
+        // ajouté après minuit voyait sa fenêtre de rattrapage ouverte sur un créneau
+        // d'hier — alors qu'il n'existait pas hier. Le bouton proposait « Je l'ai prise
+        // (hier soir) », écrivait la dose, et cette dose ne comptait pour rien : ni la
+        // série ni la semaine ne regardent les journées d'avant la création (voir
+        // `dueOn`). Elle notait sa première prise et le compteur restait à zéro, sans que
+        // rien n'explique pourquoi.
+        //
+        // La même règle des deux côtés, donc : ce que le bouton propose d'écrire est
+        // exactement ce que la série accepte de compter.
+        if (now - yesterday in 0..LATE_WINDOW && dayOf(med.createdAt) <= dayOf(yesterday)) {
+            out += yesterday
+        }
         return out
     }
 

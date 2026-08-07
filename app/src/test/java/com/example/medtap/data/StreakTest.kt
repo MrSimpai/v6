@@ -47,6 +47,28 @@ class StreakTest {
         assertEquals(2, dao.currentStreak(listOf(med), now = day2Evening))
     }
 
+    /**
+     * Le jour un.
+     *
+     * Signalé à l'usage : « j'ai ajouté le premier médicament et je l'ai pris, mais je
+     * n'ai pas eu la série ». Le calcul, lui, dit bien un — ce test le fixe pour que la
+     * question ne se repose plus, et pour qu'on cherche ailleurs le jour où elle revient.
+     */
+    @Test fun `le premier jour compte un`() = runBlocking {
+        val med = T.med(hour = 9, createdAt = T.at(2025, 6, 10, 8, 0))
+        val dao = TestDao(mutableListOf(med), mutableListOf(T.dose(med, 2025, 6, 10)))
+        val leSoirMeme = T.at(2025, 6, 10, 20, 0)
+        assertEquals(1, dao.perfectDayStreak(listOf(med), now = leSoirMeme))
+        assertEquals(1, dao.currentStreak(listOf(med), now = leSoirMeme))
+    }
+
+    /** Et zéro tant qu'elle n'est pas prise : il n'y a pas encore de journée complète. */
+    @Test fun `le premier jour vaut zero avant la dose`() = runBlocking {
+        val med = T.med(hour = 9, createdAt = T.at(2025, 6, 10, 8, 0))
+        val dao = TestDao(mutableListOf(med))
+        assertEquals(0, dao.currentStreak(listOf(med), now = T.at(2025, 6, 10, 10, 0)))
+    }
+
     /** Avant la dose du jour, le compteur montre celle d'hier plutôt que zéro. */
     @Test fun `avant la dose du jour la serie est celle d hier`() = runBlocking {
         val med = T.med(createdAt = T.at(2025, 6, 1))

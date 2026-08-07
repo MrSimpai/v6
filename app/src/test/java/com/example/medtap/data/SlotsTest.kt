@@ -48,6 +48,29 @@ class SlotsTest {
         assertTrue(slots.isEmpty())
     }
 
+    /**
+     * Mais pas pour un médicament qui n'existait pas hier soir.
+     *
+     * Le piège du tout premier jour : ajouté à 0h30 avec une pilule du soir, il tombait
+     * pile dans la fenêtre de rattrapage. Le bouton proposait « Je l'ai prise (hier
+     * soir) », la dose s'écrivait, et elle ne comptait pour rien — ni la série ni la
+     * semaine ne regardent les journées d'avant la création. Première prise notée,
+     * compteur à zéro, aucune explication à l'écran.
+     */
+    @Test fun `un medicament cree cette nuit ne propose pas la dose d hier`() {
+        val med = T.med(hour = 21, createdAt = T.at(2025, 6, 3, 0, 30))
+        assertTrue(Slots.loggableSlots(med, T.at(2025, 6, 3, 0, 35)).isEmpty())
+    }
+
+    /** Alors qu'un médicament déjà là la veille, oui : c'est bien sa dose d'hier. */
+    @Test fun `un medicament plus ancien propose bien la dose d hier`() {
+        val med = T.med(hour = 21, createdAt = T.at(2025, 6, 1))
+        assertEquals(
+            listOf(T.at(2025, 6, 2, 21, 0)),
+            Slots.loggableSlots(med, T.at(2025, 6, 3, 0, 30))
+        )
+    }
+
     /** En journée, il n'y a qu'un candidat : le créneau du jour. */
     @Test fun `en journee seul le creneau du jour est candidat`() {
         val med = T.med(hour = 9)

@@ -394,6 +394,48 @@ Both walk backwards with `Calendar.add(DAY_OF_YEAR, -1)` rather than subtracting
 a day is 23 or 25 hours long -- millisecond arithmetic lands an hour off, finds no log,
 and silently resets a streak of any length to one. Twice a year, invisibly.
 
+### The celebration the database observer used to eat
+
+Reported from use: the widget showed the streak, but logging a dose brought up neither the
+full-screen page nor the chest. Both symptoms, one cause, and it was a race.
+
+`observeDatabase` collected medications, logs and cosmetics, then did:
+
+```kotlin
+state.value = state.value.copy(week = dao.weekStatus(meds), streak = dao.currentStreak(meds), …)
+```
+
+Kotlin evaluates the **receiver first**. So `state.value` was read, the coroutine then went
+off to run roughly twenty suspending queries, and finally wrote a copy of the snapshot it
+had taken *before* all of them. Anything that changed in between was silently overwritten.
+
+And what changed in between was exactly what the insert had just kicked off. Logging a dose
+emits on that same Flow; `logDose` then sets `justLogged`, `dayComplete` and
+`streakOverlay` — which the collector wiped a fraction of a second later. Reliably, too:
+the collector has more queries to run than `logDose` does, so it almost always finished
+last. The widget was unaffected because it re-reads the database directly instead of going
+through this state. And no celebration means no `onDismiss`, which means
+`grantDailyCosmetic` never ran — hence no chest either.
+
+Every suspending call now happens *before* `state.value` is touched, so the read and the
+write are indivisible as far as other main-thread coroutines are concerned. The rule this
+leaves behind: **never let a suspending call sit between reading shared state and writing
+it back** — `copy` makes that mistake invisible, because the receiver is off-screen at the
+top of the expression while the suspension hides in an argument twelve lines down.
+
+### Where the number is actually readable
+
+It lived on the widget, in the four-second celebration, and in the Sunday recap — which is
+nowhere at all for anyone who hasn't placed the widget. Reported from use: *"j'ai ajouté le
+premier médicament et je l'ai pris, mais je n'ai pas eu la série."* The count was right; it
+simply had no home. The one thing the app asks you to do every day left no visible trace
+the rest of the time, and the number that brings people back can't live only in a screen
+that passes.
+
+It now sits in the hero card, between the dragon's line and the seven dots, in the same
+words the full-screen celebration uses. Zero is not drawn: *"0 journée complète"* is a
+reproach, and the dots already say where you stand.
+
 ### A day is only judged on the medications that existed then
 
 Every day is scored against `meds.dueOn(dayStart)` -- the medications whose `createdAt`
@@ -988,6 +1030,8 @@ comment and never once executed:
 | `le mot d avance defile sans se repeter` / `la felicitation defile sur tout le catalogue` | the once-a-day lists dealing the same card twice |
 | `remettre le rappel en place ne change pas le texte` | swiping a reminder away making the dragon appear to say something new |
 | `deux medicaments ne disent pas la meme chose` | two pills echoing each other word for word |
+| `le premier jour compte un` / `le premier jour vaut zero avant la dose` | day one, the day the whole habit either starts or doesn't |
+| `un medicament cree cette nuit ne propose pas la dose d hier` | a first dose logged into a day the medication didn't exist in, counting for nothing |
 
 `TimeZone` is pinned to `America/Montreal` in `@Before`, otherwise the DST tests would
 pass or fail depending on which machine ran them. `T.at(2025, 6, 3, 21, 0)` builds the

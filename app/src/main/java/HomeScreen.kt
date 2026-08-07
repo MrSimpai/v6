@@ -261,6 +261,32 @@ fun HomeScreen(
                         style = Type.Body, color = Pal.Muted, textAlign = TextAlign.Center
                     )
                 }
+                // Le compteur, à l'endroit où on le cherche.
+                //
+                // Il n'était affiché que sur la tuile de l'écran d'accueil du téléphone,
+                // dans la célébration de quatre secondes, et dans le bilan du dimanche.
+                // Autrement dit : nulle part, pour qui n'a pas posé la tuile. On note sa
+                // première dose, la série vaut un, et l'app n'en dit rien — donc la seule
+                // chose qu'elle demande de faire tous les jours n'a aucune trace visible
+                // le reste du temps. C'est le chiffre qui fait revenir ; il ne peut pas
+                // vivre uniquement dans un écran qui passe.
+                //
+                // Zéro ne s'affiche pas : « 0 journée complète » est un reproche, et les
+                // sept points disent déjà où on en est.
+                if (state.streak > 0) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "${state.streak}",
+                        style = Type.Display, color = Pal.Mint
+                    )
+                    Text(
+                        // Le même mot que la célébration plein écran, exactement : deux
+                        // formulations pour un seul chiffre feraient douter que ce soit
+                        // le même.
+                        if (state.streak == 1) "JOURNÉE COMPLÈTE" else "JOURNÉES COMPLÈTES",
+                        style = Type.Label, color = Pal.Mint
+                    )
+                }
                 if (state.week.size == 7) {
                     Spacer(Modifier.height(14.dp))
                     WeekDots(state.week)

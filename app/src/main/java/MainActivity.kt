@@ -464,27 +464,53 @@ class MainActivity : ComponentActivity() {
             ) { meds, logs, cosmetics -> Triple(meds, logs, cosmetics) }
                 .collect { (meds, logs, cosmetics) ->
                     meds.forEach { Reminders.scheduleNext(this@MainActivity, it) }
+
+                    // TOUT ce qui interroge la base est calculé AVANT qu'on touche à
+                    // l'état, et surtout avant de lire `state.value`.
+                    //
+                    // Il y avait ici un seul `state.value = state.value.copy(…)` dont
+                    // plusieurs arguments suspendaient. Kotlin évalue le receveur en
+                    // premier : `state.value` était donc lu, puis la coroutine partait
+                    // faire une vingtaine de requêtes, puis écrivait une copie de
+                    // l'instantané d'AVANT. Tout ce qui avait changé pendant ce temps
+                    // était écrasé.
+                    //
+                    // Et ce qui changeait pendant ce temps, c'était précisément ce que
+                    // l'insertion venait de déclencher. Noter une dose émettait sur ce
+                    // Flow, puis `logDose` posait `streakOverlay` et `justLogged` — qui se
+                    // faisaient effacer une fraction de seconde plus tard par ce
+                    // `collect`. La page de série et le coffre n'apparaissaient jamais,
+                    // alors que la dose, elle, était bien écrite : la tuile affichait la
+                    // bonne série puisqu'elle relit la base au lieu de passer par ici.
+                    //
+                    // Rien ne suspend plus entre la lecture et l'écriture, donc les deux
+                    // sont indivisibles pour les autres coroutines du fil principal.
+                    val week = dao.weekStatus(meds)
+                    // Combien de fois, cette semaine, un rappel n'est pas parti du tout.
+                    // Recalculé à chaque changement de données, donc noter la dose
+                    // manquante fait disparaître l'avertissement tout seul.
+                    val misses = dao.silentMisses(meds)
+                    val streak = dao.currentStreak(meds)
+                    val battery = !ReminderHealth.batteryUnrestricted(this@MainActivity)
+                    val taken = logs.map { it.tagId to Slots.dayOf(it.scheduledFor) }.toSet()
+                    val owned = cosmetics.map { it.id }.toSet()
+                    val worn = cosmetics.filter { it.equipped }.map { it.id }.toSet()
+
                     state.value = state.value.copy(
                         meds = meds,
                         logs = logs,
-                        takenDays = logs.map { it.tagId to Slots.dayOf(it.scheduledFor) }.toSet(),
-                        week = dao.weekStatus(meds),
-                        owned = cosmetics.map { it.id }.toSet(),
-                        worn = cosmetics.filter { it.equipped }.map { it.id }.toSet(),
-                        batteryRestricted = !ReminderHealth.batteryUnrestricted(this@MainActivity),
-                        // Combien de fois, cette semaine, un rappel n'est pas parti du
-                        // tout. Recalculé à chaque changement de données, donc noter la
-                        // dose manquante fait disparaître l'avertissement tout seul.
-                        silentMisses = dao.silentMisses(meds),
-                        streak = dao.currentStreak(meds)
+                        takenDays = taken,
+                        week = week,
+                        owned = owned,
+                        worn = worn,
+                        batteryRestricted = battery,
+                        silentMisses = misses,
+                        streak = streak
                     )
                     DragonWidget.refresh(this@MainActivity)
                     // Le raccourci du lanceur porte la tenue du moment. L'icône, elle,
                     // ne le peut pas — voir DragonShortcut pour pourquoi.
-                    DragonShortcut.refresh(
-                        this@MainActivity,
-                        cosmetics.filter { it.equipped }.map { it.id }.toSet()
-                    )
+                    DragonShortcut.refresh(this@MainActivity, worn)
                 }
         }
     }
