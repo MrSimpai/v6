@@ -21,6 +21,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
+import androidx.room.withTransaction
 import com.example.medtap.data.*
 import com.example.medtap.reminder.Reminders
 import com.example.medtap.ui.*
@@ -126,11 +127,7 @@ class MainActivity : ComponentActivity() {
                     onMarkTaken = { med -> logDose(med) },
                     onForget = { med -> forget(med) },
                     onSkip = { med -> skipDose(med) },
-                    onEdit = { med -> editing.value = med },
-                    onCancelPairing = {
-                        pendingMed = null
-                        state.value = state.value.copy(pairing = false)
-                    }
+                    onEdit = { med -> editing.value = med }
                 )
                     }
                 }
@@ -167,9 +164,15 @@ class MainActivity : ComponentActivity() {
                 editing.value?.let { med ->
                     AddMedicationScreen(
                         onDismiss = { editing.value = null },
-                        onConfirm = { draft, _ ->
+                        onConfirm = { draft, pairWithTag ->
                             editing.value = null
                             saveMedication(draft)
+                            if (pairWithTag) {
+                                pendingMed = draft
+                                state.value = state.value.copy(
+                                    pairing = draft.name, nfcNote = null
+                                )
+                            }
                         },
                         existing = med
                     )
@@ -178,15 +181,35 @@ class MainActivity : ComponentActivity() {
                     onDismiss = { showAdd = false },
                     onConfirm = { draft, pairWithTag ->
                         showAdd = false
+                        // Le médicament est TOUJOURS enregistré ici, étiquette ou pas.
+                        //
+                        // Avant, choisir « lier une étiquette » le mettait de côté dans une
+                        // variable et n'écrivait rien : sortir de l'appairage, ou simplement
+                        // recevoir un appel, le faisait disparaître sans un mot. Il est
+                        // maintenant en base avec ses rappels armés avant qu'on parle
+                        // d'étiquette, et l'appairage ne fait plus que changer sa clé.
+                        val saved = draft.copy(tagId = Medication.manualId())
+                        saveMedication(saved)
                         if (pairWithTag) {
-                            // Hold it aside; the next tag we see becomes its key.
-                            pendingMed = draft
-                            state.value = state.value.copy(pairing = true)
-                        } else {
-                            saveMedication(draft.copy(tagId = Medication.manualId()))
+                            pendingMed = saved
+                            state.value = state.value.copy(
+                                pairing = saved.name, nfcNote = null
+                            )
                         }
                     }
                 )
+
+                // L'appairage prend toute la page tant qu'il dure.
+                state.value.pairing?.let { name ->
+                    PairTagScreen(
+                        medName = name,
+                        nfcOff = state.value.nfcOff,
+                        hasNfc = state.value.hasNfc,
+                        error = state.value.nfcNote,
+                        onOpenNfcSettings = { openNfcSettings() },
+                        onSkip = { endPairing() }
+                    )
+                }
                 }
             }
         }
@@ -423,25 +446,69 @@ class MainActivity : ComponentActivity() {
         tag?.let { onTagScanned(it) }
     }
 
+    /** Ferme la page d'appairage. Le médicament reste : il est enregistré depuis le départ. */
+    private fun endPairing() {
+        pendingMed = null
+        state.value = state.value.copy(pairing = null, nfcNote = null)
+    }
+
+    private fun openNfcSettings() {
+        runCatching { startActivity(Intent(android.provider.Settings.ACTION_NFC_SETTINGS)) }
+    }
+
+    /** Un mot à l'écran, qui s'efface tout seul. */
+    private fun note(text: String) = lifecycleScope.launch {
+        state.value = state.value.copy(nfcNote = text)
+        delay(6000)
+        if (state.value.nfcNote == text) state.value = state.value.copy(nfcNote = null)
+    }
+
     private fun onTagScanned(tag: Tag) {
         val uid = tag.id.joinToString("") { "%02X".format(it) }
         lifecycleScope.launch(Dispatchers.IO) {
             val dao = Db.get(this@MainActivity).dao()
+            val already = dao.med(uid)
 
-            // Pairing a brand-new tag to a medication the user just described.
-            pendingMed?.let { draft ->
-                val med = draft.copy(tagId = uid)
-                dao.upsert(med)
+            pendingMed?.let { pending ->
+                // Une étiquette déjà prise ne doit surtout pas être réattribuée : `upsert`
+                // écraserait l'autre médicament, avec son historique, sans rien demander.
+                if (already != null && already.tagId != pending.tagId) {
+                    withContext(Dispatchers.Main) {
+                        note("Cette étiquette est déjà celle de ${already.name}.")
+                    }
+                    return@launch
+                }
+
+                // Changer la clé, c'est déplacer la ligne ET son historique, dans une seule
+                // transaction. L'ordre compte : la nouvelle ligne d'abord, les doses
+                // ensuite, la vieille ligne en dernier — l'inverse ferait tomber les doses
+                // dans la cascade de la clé étrangère.
+                val med = pending.copy(tagId = uid)
+                Reminders.cancelAll(this@MainActivity, pending)
+                Db.get(this@MainActivity).withTransaction {
+                    dao.upsert(med)
+                    dao.retagLogs(pending.tagId, uid)
+                    dao.deleteMed(pending.tagId)
+                }
                 Reminders.scheduleNext(this@MainActivity, med)
-                pendingMed = null
                 withContext(Dispatchers.Main) {
-                    state.value = state.value.copy(pairing = false)
+                    pendingMed = null
+                    state.value = state.value.copy(pairing = null, nfcNote = null)
+                    note("Étiquette liée à ${med.name} 🎉")
                 }
                 return@launch
             }
 
-            val med = dao.med(uid) ?: return@launch     // unknown tag, ignore quietly
-            logDose(med)
+            // Hors appairage, une étiquette inconnue ne faisait rien du tout. Sans le
+            // moindre retour, c'est indistinguable d'un NFC en panne — et c'est très
+            // exactement ce qu'on en concluait.
+            if (already == null) {
+                withContext(Dispatchers.Main) {
+                    note("Étiquette inconnue. Ouvre un médicament pour la lui lier.")
+                }
+                return@launch
+            }
+            logDose(already)
         }
     }
 

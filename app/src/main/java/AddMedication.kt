@@ -261,21 +261,29 @@ fun AddMedicationScreen(
                 modifier = Modifier.fillMaxWidth().height(54.dp)
             ) { Text(if (existing == null) "Ajouter" else "Enregistrer", style = Type.Title) }
 
-            if (existing == null) {
-                Spacer(Modifier.height(4.dp))
-                TextButton(
-                    onClick = { onConfirm(draft(), true) },
-                    enabled = name.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Ou lier une étiquette NFC maintenant", style = Type.Body, color = Pal.Iris)
-                }
+            // Proposé aussi en modification : une étiquette se colle le jour où on en a
+            // une sous la main, pas forcément le jour où on saisit le médicament. Sans
+            // cette entrée-là, « plus tard » n'existait nulle part.
+            Spacer(Modifier.height(4.dp))
+            TextButton(
+                onClick = { onConfirm(draft(), true) },
+                enabled = name.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(
-                    "Une étiquette collée sur la bouteille permet d'enregistrer la dose en " +
-                        "approchant le téléphone. Ça se fait très bien plus tard.",
-                    style = Type.Label, color = Pal.Muted
+                    if (existing == null) "Ajouter et coller une étiquette NFC"
+                    else "Coller une étiquette NFC sur cette bouteille",
+                    style = Type.Body, color = Pal.Iris
                 )
             }
+            Text(
+                "Une petite étiquette autocollante, à coller sur la bouteille. Ensuite, " +
+                    "approcher le téléphone de la bouteille enregistre la dose — sans " +
+                    "déverrouiller, sans ouvrir l'app. Facultatif, et ça se fait n'importe " +
+                    "quand.",
+                style = Type.Label, color = Pal.Muted, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

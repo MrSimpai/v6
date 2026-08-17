@@ -66,7 +66,16 @@ data class HomeState(
     val silentMisses: Int = 0,
     /** La série telle que la lit le widget. Ici, elle sert à décider quand elle a le droit d'être fière. */
     val streak: Int = 0,
-    val pairing: Boolean = false,
+    /**
+     * Le médicament dont on est en train de lier l'étiquette, ou `null`.
+     *
+     * C'est un nom et non un booléen parce que la page d'appairage l'affiche : savoir
+     * QUELLE bouteille on est en train d'étiqueter est la première chose qu'on se demande
+     * en tenant l'étiquette et le téléphone.
+     */
+    val pairing: String? = null,
+    /** Ce que le NFC vient de répondre : étiquette inconnue, déjà prise, ou rien. */
+    val nfcNote: String? = null,
     val hasNfc: Boolean = true,
     val nfcOff: Boolean = false
 )
@@ -111,7 +120,6 @@ fun HomeScreen(
     onForget: (Medication) -> Unit,
     onSkip: (Medication) -> Unit,
     onEdit: (Medication) -> Unit,
-    onCancelPairing: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // L'heure, qui avance pendant qu'on regarde l'écran.
@@ -249,15 +257,10 @@ fun HomeScreen(
             ) {
                 Mascot(mood, Modifier.size(200.dp), worn = state.dressed)
                 Spacer(Modifier.height(8.dp))
+                // L'appairage a sa propre page maintenant : il n'a plus rien à dire ici.
                 AnimatedContent(targetState = mood, label = "prompt") { m ->
                     Text(
-                        when {
-                            state.pairing && state.nfcOff ->
-                                "Active le NFC, puis approche l'étiquette"
-                            state.pairing ->
-                                "Approche une étiquette vierge du dos du téléphone"
-                            else -> FloMessages.moodLine(m)
-                        },
+                        FloMessages.moodLine(m),
                         style = Type.Body, color = Pal.Muted, textAlign = TextAlign.Center
                     )
                 }
@@ -291,11 +294,17 @@ fun HomeScreen(
                     Spacer(Modifier.height(14.dp))
                     WeekDots(state.week)
                 }
-                if (state.pairing) {
-                    Spacer(Modifier.height(10.dp))
-                    TextButton(onClick = onCancelPairing) {
-                        Text("Annuler l'appairage", style = Type.Label, color = Pal.Iris)
-                    }
+                // Ce que le NFC vient de répondre, quand ce n'était pas une dose : une
+                // étiquette inconnue ne faisait RIEN du tout, silencieusement, ce qui se
+                // lit exactement comme un NFC en panne.
+                state.nfcNote?.let { note ->
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        note,
+                        style = Type.Label, color = Pal.Apricot,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
                 }
             }
         }

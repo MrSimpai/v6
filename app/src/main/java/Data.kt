@@ -206,6 +206,17 @@ interface MedDao {
     @Query("DELETE FROM DoseLog WHERE tagId = :tagId")
     suspend fun deleteLogs(tagId: String)
 
+    /**
+     * Déplace l'historique d'une clé à l'autre, quand on colle une étiquette sur un
+     * médicament qui existait déjà sans.
+     *
+     * Sans ça, changer la clé signifierait supprimer la ligne du médicament — et la
+     * cascade de la clé étrangère emporterait toutes ses doses avec elle. Des mois
+     * d'historique effacés pour avoir collé un autocollant sur une bouteille.
+     */
+    @Query("UPDATE DoseLog SET tagId = :to WHERE tagId = :from")
+    suspend fun retagLogs(from: String, to: String)
+
     @Query("DELETE FROM Medication WHERE tagId = :tagId")
     suspend fun deleteMed(tagId: String)
 
