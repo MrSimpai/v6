@@ -675,6 +675,14 @@ you actually want it.
 The widget keeps showing the real outfit throughout, since it reads the database. The
 try-on only exists inside the app, which is the only place the countdown is visible.
 
+**The dragon is pinned to the top, and shrinks rather than leaving.** The whole page used
+to scroll as one block, so the moment you reached the pieces, the only thing that matters —
+what it actually looks like on her — slid off the top. You'd dress her blind, scroll up to
+look, scroll back down. The preview card is now fixed, and the dragon lerps from 206dp to
+104dp as you scroll: full size when you're just admiring her, compact but still visible
+while you dig through the collection. The header takes a shadow only once there's something
+scrolled underneath it to separate.
+
 Pieces are grouped by slot and **one is worn per slot**: equipping a hat silently removes
 the hat already there, rather than showing an error. Nobody wants to read "please remove
 your tuque first" for a problem the app can solve by itself.

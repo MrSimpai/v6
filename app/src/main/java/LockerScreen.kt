@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import com.example.medtap.Her
 import kotlinx.coroutines.delay
 
@@ -39,82 +40,111 @@ fun LockerScreen(
     modifier: Modifier = Modifier
 ) {
     val previewing = previewUntil != null
+    val scroll = rememberScrollState()
 
-    Column(
-        modifier
-            .fillMaxSize()
-            .background(Pal.Mist)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-            .padding(top = 28.dp, bottom = 40.dp)
-    ) {
-        Text("CASIER", style = Type.Label, color = Pal.Muted)
-        Spacer(Modifier.height(6.dp))
-        Text("La garde-robe de ${Her.dragon}", style = Type.Display, color = Pal.Ink)
+    // Le dragon rétrécit au lieu de partir.
+    //
+    // Tout l'écran défilait d'un bloc : dès qu'on descendait vers les pièces, la seule
+    // chose qui compte — l'effet que ça fait sur elle — sortait par le haut. On habillait
+    // à l'aveugle, on remontait pour regarder, on redescendait. Le carton est donc épinglé,
+    // et il maigrit à mesure qu'on défile : grand quand on ne fait que la regarder, compact
+    // mais toujours là quand on fouille la collection.
+    val collapse = (scroll.value / 300f).coerceIn(0f, 1f)
+    val dragonSize = lerp(206.dp, 104.dp, collapse)
 
-        Spacer(Modifier.height(18.dp))
+    Column(modifier.fillMaxSize().background(Pal.Mist)) {
 
-        Surface(color = Pal.Card, shape = Soft) {
+        // ---- l'en-tête, qui ne bouge pas ----
+        Surface(
+            color = Pal.Mist,
+            // L'ombre n'apparaît qu'une fois qu'il y a quelque chose à séparer.
+            shadowElevation = if (collapse > 0.02f) 8.dp else 0.dp
+        ) {
             Column(
-                Modifier.fillMaxWidth().padding(vertical = 26.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 24.dp, bottom = 12.dp)
             ) {
-                // Pendant l'essayage, elle répond au mot plutôt que de sourire poliment.
-                Mascot(
-                    if (previewing) Mood.Love else Mood.Cheering,
-                    Modifier.size(210.dp), worn = worn
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    if (worn.isEmpty()) "Rien sur le dos pour l'instant"
-                    else "${worn.size} pièce${if (worn.size > 1) "s" else ""} portée${if (worn.size > 1) "s" else ""}",
-                    style = Type.Label, color = Pal.Muted
-                )
+                Text("CASIER", style = Type.Label, color = Pal.Muted)
+                Spacer(Modifier.height(4.dp))
+                Text("La garde-robe de ${Her.dragon}", style = Type.Title, color = Pal.Ink)
+
+                Spacer(Modifier.height(12.dp))
+
+                Surface(color = Pal.Card, shape = Soft) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Pendant l'essayage, elle répond au mot plutôt que de sourire poliment.
+                        Mascot(
+                            if (previewing) Mood.Love else Mood.Cheering,
+                            Modifier.size(dragonSize), worn = worn
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            if (worn.isEmpty()) "Rien sur le dos pour l'instant"
+                            else "${worn.size} pièce${if (worn.size > 1) "s" else ""} portée${if (worn.size > 1) "s" else ""}",
+                            style = Type.Label, color = Pal.Muted
+                        )
+                    }
+                }
             }
         }
 
-        Spacer(Modifier.height(24.dp))
-        Text(
-            "COLLECTION — ${owned.size}/${Cosmetics.ALL.size}",
-            style = Type.Label, color = Pal.Muted
-        )
-        Spacer(Modifier.height(12.dp))
+        // ---- la collection, qui défile dessous ----
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(scroll)
+                .padding(horizontal = 20.dp)
+                .padding(top = 16.dp, bottom = 40.dp)
+        ) {
+            Text(
+                "COLLECTION — ${owned.size}/${Cosmetics.ALL.size}",
+                style = Type.Label, color = Pal.Muted
+            )
+            Spacer(Modifier.height(12.dp))
 
-        Slot.entries.forEach { slot ->
-            val items = Cosmetics.ALL.filter { it.slot == slot }
-            if (items.isEmpty()) return@forEach
+            Slot.entries.forEach { slot ->
+                val items = Cosmetics.ALL.filter { it.slot == slot }
+                if (items.isEmpty()) return@forEach
 
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(slot.label.uppercase(), style = Type.Label, color = Pal.Iris,
-                    modifier = Modifier.weight(1f))
-                val here = items.count { it.id in owned }
-                Text("$here/${items.size}", style = Type.Label, color = Pal.Muted)
-            }
-            Spacer(Modifier.height(8.dp))
-            items.forEach { item ->
-                CosmeticRow(
-                    item = item,
-                    // Le compte en haut reste celui des pièces réellement gagnées : c'est
-                    // l'essayage qui est temporaire, pas la collection.
-                    unlocked = previewing || item.id in owned,
-                    equipped = item.id in worn,
-                    onToggle = { onToggle(item.id) }
-                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        slot.label.uppercase(), style = Type.Label, color = Pal.Iris,
+                        modifier = Modifier.weight(1f)
+                    )
+                    val here = items.count { it.id in owned }
+                    Text("$here/${items.size}", style = Type.Label, color = Pal.Muted)
+                }
+                Spacer(Modifier.height(8.dp))
+                items.forEach { item ->
+                    CosmeticRow(
+                        item = item,
+                        // Le compte en haut reste celui des pièces réellement gagnées :
+                        // c'est l'essayage qui est temporaire, pas la collection.
+                        unlocked = previewing || item.id in owned,
+                        equipped = item.id in worn,
+                        onToggle = { onToggle(item.id) }
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
                 Spacer(Modifier.height(10.dp))
             }
-            Spacer(Modifier.height(10.dp))
+
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Une pièce par journée complète, jamais deux fois la même, et une seule " +
+                    "portée par emplacement. Une fois gagnées, elles restent à toi.",
+                style = Type.Label, color = Pal.Muted, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(26.dp))
+            PreviewCode(previewUntil, onCode)
         }
-
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "Une pièce par journée complète, jamais deux fois la même, et une seule " +
-                "portée par emplacement. Une fois gagnées, elles restent à toi.",
-            style = Type.Label, color = Pal.Muted, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(Modifier.height(26.dp))
-        PreviewCode(previewUntil, onCode)
     }
 }
 
