@@ -55,6 +55,10 @@ class TestDao(
     override suspend fun deleteLogs(tagId: String) { logs.removeAll { it.tagId == tagId } }
     override suspend fun deleteMed(tagId: String) { meds.removeAll { it.tagId == tagId } }
 
+    override suspend fun retagLogs(from: String, to: String) {
+        for (i in logs.indices) if (logs[i].tagId == from) logs[i] = logs[i].copy(tagId = to)
+    }
+
     override suspend fun freezeDays(): List<Long> = freezes.map { it.dayStart }
     override suspend fun freezesSince(since: Long): List<StreakFreeze> =
         freezes.filter { it.usedAt >= since }
