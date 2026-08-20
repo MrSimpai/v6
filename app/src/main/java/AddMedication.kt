@@ -100,7 +100,7 @@ fun AddMedicationScreen(
         createdAt = existing?.createdAt ?: System.currentTimeMillis()
     ).withWindows(week.toList())
 
-    Box(Modifier.fillMaxSize().background(Pal.Mist)) {
+    Box(Modifier.fillMaxSize().sky()) {
         Column(
             Modifier
                 .fillMaxSize()

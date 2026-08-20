@@ -32,7 +32,7 @@ fun SettingsScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(Pal.Mist)
+            .sky()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
             .padding(top = 28.dp, bottom = 60.dp)

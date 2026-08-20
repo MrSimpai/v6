@@ -179,7 +179,7 @@ fun HomeScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(Pal.Mist)
+            .sky()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
             .padding(top = 28.dp, bottom = 40.dp)
@@ -388,9 +388,10 @@ fun HomeScreen(
                         style = Type.Label, color = Pal.Muted
                     )
                     Spacer(Modifier.height(24.dp))
-                    // L'heure seule, sans la plage : le graphique trace l'écart au
-                    // créneau, et le créneau c'est le début.
-                    DriftChart(points, "CIBLE ${hhmm(med.windowToday(now).startMinute)}")
+                    // La plage est écrite par le graphique lui-même, à partir des jours
+                    // qu'il affiche : la lui passer d'ici voudrait dire choisir un jour de
+                    // référence, et se tromper dès que la semaine n'est pas uniforme.
+                    DoseChart(points)
                 }
             }
         }

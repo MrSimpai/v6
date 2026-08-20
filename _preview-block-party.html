@@ -1,0 +1,769 @@
+<title>Our Block Night</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Nunito:ital,wght@0,400;0,600;0,700;1,400&family=Silkscreen&display=swap">
+
+<style>
+:root{
+  --paper:#F7F1F5; --card:#FFFFFF; --tint:#F1EAF1; --edge:#E6DBE6;
+  --ink:#3B2E3E; --ink2:#6F6072; --ink3:#A0919F;
+  --moss:#5B8B52; --honey:#C9861F; --berry:#C2557A; --sky:#4F87B8; --lilac:#8267BE;
+  --moss-t:#E6F0E2; --honey-t:#F8EDD8; --berry-t:#F8E4EB; --sky-t:#E1EDF7; --lilac-t:#EDE6F8;
+  --shadow:0 2px 0 rgba(59,46,62,.05), 0 10px 26px -12px rgba(59,46,62,.30);
+  --cell:22px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#1D1723; --card:#2A2231; --tint:#332A3B; --edge:#3E3348;
+  --ink:#F3E9F0; --ink2:#BCACBE; --ink3:#8B7C90;
+  --moss:#8CCB7C; --honey:#EFB758; --berry:#F0879F; --sky:#7FB6E4; --lilac:#B79BF0;
+  --moss-t:#25321F; --honey-t:#332713; --berry-t:#361D26; --sky-t:#1B2A38; --lilac-t:#2A2140;
+  --shadow:0 2px 0 rgba(0,0,0,.18), 0 14px 30px -14px rgba(0,0,0,.7);
+}}
+:root[data-theme="dark"]{
+  --paper:#1D1723; --card:#2A2231; --tint:#332A3B; --edge:#3E3348;
+  --ink:#F3E9F0; --ink2:#BCACBE; --ink3:#8B7C90;
+  --moss:#8CCB7C; --honey:#EFB758; --berry:#F0879F; --sky:#7FB6E4; --lilac:#B79BF0;
+  --moss-t:#25321F; --honey-t:#332713; --berry-t:#361D26; --sky-t:#1B2A38; --lilac-t:#2A2140;
+  --shadow:0 2px 0 rgba(0,0,0,.18), 0 14px 30px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{margin:0; background:var(--paper); color:var(--ink);
+  font-family:Nunito,"Segoe UI",system-ui,sans-serif; font-size:16.5px; line-height:1.6;
+  -webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0; font-family:"Baloo 2",Nunito,sans-serif; font-weight:700; line-height:1.2; text-wrap:balance}
+p{margin:0}
+button{font:inherit; color:inherit; cursor:pointer; border:0; background:none}
+:focus-visible{outline:3px solid var(--lilac); outline-offset:3px; border-radius:8px}
+.wrap{max-width:600px; margin:0 auto; padding:0 20px}
+.pix{font-family:Silkscreen,monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase}
+svg{display:block; image-rendering:pixelated}
+
+/* header */
+header{padding:34px 0 20px; text-align:center}
+header h1{font-size:clamp(30px,7.5vw,42px); letter-spacing:-.01em}
+header h1 em{font-style:normal; color:var(--berry)}
+header p{color:var(--ink2); font-size:15.5px; margin-top:6px}
+
+/* nav */
+nav{position:sticky; top:0; z-index:20; background:var(--paper); padding:10px 0 14px}
+.seg{display:flex; gap:6px; background:var(--tint); padding:6px; border-radius:999px}
+.seg button{flex:1; padding:10px 6px; border-radius:999px; font-family:"Baloo 2",sans-serif;
+  font-weight:600; font-size:14.5px; color:var(--ink2); transition:background .18s ease, color .18s ease}
+.seg button[aria-current="true"]{background:var(--card); color:var(--ink); box-shadow:0 2px 8px -3px rgba(59,46,62,.35)}
+
+main{padding-bottom:64px}
+section[hidden]{display:none}
+.ask{text-align:center; margin:14px 0 16px}
+.ask h2{font-size:20px}
+.ask p{color:var(--ink3); font-size:14px; margin-top:2px}
+
+/* moods */
+.moods{display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-bottom:18px}
+.mood{display:flex; flex-direction:column; align-items:center; gap:7px; padding:14px 6px 11px;
+  background:var(--card); border:2px solid var(--edge); border-radius:18px;
+  font-family:"Baloo 2",sans-serif; font-weight:600; font-size:13px; color:var(--ink2);
+  transition:transform .16s ease, border-color .16s ease, background .16s ease}
+.mood svg{width:26px; height:26px; opacity:.8}
+.mood:hover{transform:translateY(-3px)}
+.mood[aria-pressed="true"]{background:var(--t); border-color:var(--c); color:var(--ink)}
+.mood[aria-pressed="true"] svg{opacity:1}
+
+/* big button */
+.go{display:block; width:100%; padding:17px; border-radius:20px; background:var(--berry); color:#fff;
+  font-family:"Baloo 2",sans-serif; font-weight:700; font-size:19px;
+  box-shadow:0 5px 0 rgba(0,0,0,.13), var(--shadow); transition:transform .12s ease, box-shadow .12s ease}
+.go:hover{transform:translateY(-2px); box-shadow:0 7px 0 rgba(0,0,0,.13), var(--shadow)}
+.go:active{transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.13)}
+
+/* idea card */
+.idea{margin-top:20px; background:var(--card); border-radius:24px; padding:26px 24px 24px; box-shadow:var(--shadow)}
+@keyframes pop{from{opacity:0; transform:translateY(14px) scale(.985)} to{opacity:1; transform:none}}
+.idea.new{animation:pop .32s cubic-bezier(.2,.9,.3,1.15)}
+.idea .tagline{display:flex; align-items:center; gap:9px; color:var(--c,var(--berry))}
+.idea .tagline svg{width:19px; height:19px}
+.idea h3{font-size:clamp(25px,6vw,32px); margin:10px 0 8px}
+.idea .why{color:var(--ink2); font-size:16px}
+.how{margin-top:20px; background:var(--t,var(--berry-t)); border-radius:18px; padding:18px 20px}
+.how .pix{color:var(--c,var(--berry)); display:block; margin-bottom:10px}
+.how ol{margin:0; padding-left:20px; display:flex; flex-direction:column; gap:9px}
+.how li{font-size:15.5px; line-height:1.5}
+.how li::marker{font-weight:700; color:var(--c,var(--berry))}
+.tags{display:flex; gap:8px; flex-wrap:wrap; margin-top:18px}
+.tag{padding:5px 12px; border-radius:999px; background:var(--tint); color:var(--ink2); font-size:13px; font-weight:600}
+.pair{display:flex; gap:10px; margin-top:20px}
+.pair button{flex:1; padding:13px; border-radius:16px; font-family:"Baloo 2",sans-serif; font-weight:600; font-size:15px;
+  transition:transform .12s ease}
+.pair button:active{transform:translateY(2px)}
+.b1{background:var(--moss); color:#fff}
+.b2{background:var(--tint); color:var(--ink2)}
+.empty{color:var(--ink3); font-size:15px; text-align:center; padding:34px 20px}
+
+/* checklist idea */
+.finds{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px}
+.find{padding:8px 14px; border-radius:999px; background:var(--tint); font-size:14px; font-weight:600; color:var(--ink2);
+  transition:background .15s ease, color .15s ease}
+.find[aria-pressed="true"]{background:var(--moss); color:#fff; text-decoration:line-through}
+
+/* shelf */
+.shelf{margin-top:30px; background:var(--card); border-radius:22px; padding:20px; box-shadow:var(--shadow)}
+.shelf .pix{color:var(--ink3)}
+.stickers{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px}
+.st{width:38px; height:38px; border-radius:12px; background:var(--tint); display:grid; place-items:center}
+.st svg{width:22px; height:22px}
+.shelf .last{margin-top:14px; font-size:14px; color:var(--ink2)}
+.shelf .last b{font-weight:700; color:var(--ink)}
+
+/* slow quests */
+.qpick{display:grid; gap:10px; margin-top:6px}
+.qcard{text-align:left; background:var(--card); border-radius:20px; padding:17px 19px; box-shadow:var(--shadow);
+  display:flex; align-items:center; gap:15px; transition:transform .16s ease}
+.qcard:hover{transform:translateY(-2px)}
+.qcard .n{flex:1}
+.qcard h3{font-size:19px}
+.qcard p{font-size:14px; color:var(--ink2); margin-top:2px}
+.ring{width:46px; height:46px; flex:0 0 46px; border-radius:50%; display:grid; place-items:center;
+  background:var(--t); color:var(--c); font-family:"Baloo 2",sans-serif; font-weight:700; font-size:13px}
+.dots{display:flex; gap:6px; justify-content:center; margin:18px 0 4px}
+.dot{width:9px; height:9px; border-radius:50%; background:var(--edge)}
+.dot.on{background:var(--c)}
+.dot.now{background:var(--c); box-shadow:0 0 0 4px var(--t)}
+.backlink{display:inline-flex; align-items:center; gap:7px; color:var(--ink2); font-weight:600; font-size:14px; padding:8px 0}
+
+/* bricks */
+.chips{display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 18px}
+.chip{padding:9px 15px; border-radius:999px; background:var(--card); border:2px solid var(--edge);
+  font-family:"Baloo 2",sans-serif; font-weight:600; font-size:14px; color:var(--ink2); transition:all .15s ease}
+.chip[aria-pressed="true"]{background:var(--lilac); border-color:var(--lilac); color:#fff}
+.plate-box{background:var(--card); border-radius:24px; padding:22px; box-shadow:var(--shadow); overflow-x:auto}
+.plan{display:inline-block; min-width:min-content; margin:0 auto}
+.rt{display:flex; margin-left:20px}
+.rt i{width:var(--cell); flex:0 0 var(--cell); text-align:center; font-style:normal;
+  font-family:Silkscreen,monospace; font-size:8px; color:var(--ink3); line-height:14px}
+.prow{display:flex}
+.rl{width:20px; flex:0 0 20px; display:flex; flex-direction:column}
+.rl i{height:var(--cell); flex:0 0 var(--cell); display:grid; place-items:center; font-style:normal;
+  font-family:Silkscreen,monospace; font-size:8px; color:var(--ink3)}
+.plate{position:relative; border-radius:6px; background:var(--tint);
+  background-image:radial-gradient(circle at 50% 50%, var(--edge) 21%, transparent 22%); background-size:var(--cell) var(--cell)}
+.pc{position:absolute; border-radius:3px;
+  box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.30), inset 0 3px 0 rgba(255,255,255,.22), inset 0 -3px 0 rgba(0,0,0,.13);
+  background-image:radial-gradient(circle at 50% 50%, rgba(255,255,255,.32) 23%, transparent 24%); background-size:var(--cell) var(--cell)}
+.plate.flat .pc{box-shadow:none; background-image:none; border-radius:0}
+.layers{display:flex; gap:7px; flex-wrap:wrap; margin-bottom:14px}
+.lay{padding:7px 13px; border-radius:999px; background:var(--tint); font-size:13px; font-weight:700; color:var(--ink2)}
+.lay[aria-pressed="true"]{background:var(--sky); color:#fff}
+.parts{margin-top:16px; background:var(--card); border-radius:22px; padding:20px; box-shadow:var(--shadow)}
+.parts h3{font-size:18px}
+.parts .sub{color:var(--ink2); font-size:14.5px; margin-top:5px}
+.parts ul{list-style:none; padding:0; margin:16px 0 0; display:flex; flex-direction:column; gap:2px}
+.parts li{display:flex; align-items:center; gap:11px; padding:7px 0; border-bottom:1px solid var(--edge); font-size:14.5px}
+.parts li:last-child{border-bottom:0}
+.sw{width:17px; height:17px; border-radius:5px; flex:0 0 17px; box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.22)}
+.parts li .nm{flex:1}
+.parts li .q{font-weight:700; font-variant-numeric:tabular-nums}
+.tiny{color:var(--ink3); font-size:13.5px; margin-top:14px; line-height:1.5}
+.tools{display:flex; gap:8px; margin-top:14px}
+.tools button{padding:10px 16px; border-radius:14px; background:var(--tint); font-family:"Baloo 2",sans-serif;
+  font-weight:600; font-size:14px; color:var(--ink2)}
+
+footer{text-align:center; color:var(--ink3); font-size:13px; padding:0 0 40px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+@media (max-width:400px){.moods{grid-template-columns:repeat(2,1fr)}}
+</style>
+
+<header class="wrap">
+  <h1>Our <em>Block</em> Night</h1>
+  <p>Bored? Tap a mood. We'll find you something to do — and tell you how to do it.</p>
+</header>
+
+<nav class="wrap">
+  <div class="seg" id="seg"></div>
+</nav>
+
+<main class="wrap">
+
+  <section id="s-tonight">
+    <div class="ask">
+      <h2>What do you feel like?</h2>
+      <p>Pick one, or don't — we'll surprise you.</p>
+    </div>
+    <div class="moods" id="moods"></div>
+    <button class="go" id="go">Give us something to do</button>
+    <div id="ideaBox"></div>
+    <div class="shelf" id="shelf"></div>
+  </section>
+
+  <section id="s-slow" hidden>
+    <div id="slowBody"></div>
+  </section>
+
+  <section id="s-bricks" hidden>
+    <div class="ask">
+      <h2>Build it for real</h2>
+      <p>Pick one. Every square is one stud — the numbers help you count.</p>
+    </div>
+    <div class="chips" id="buildPick"></div>
+    <div class="layers" id="layerTabs"></div>
+    <div class="plate-box"><div class="plan" id="plan"></div></div>
+    <div class="tools">
+      <button id="viewToggle">Show the brick plan</button>
+    </div>
+    <div class="parts" id="parts"></div>
+  </section>
+
+</main>
+
+<footer>Everything saves right here in this browser. No accounts, no internet needed.</footer>
+
+<script>
+"use strict";
+
+/* ── colors ─────────────────────────────────────────── */
+const COL={
+  k:["Black","#1B2A34"], w:["White","#F4F4F4"], g:["Bright Green","#4B9F4A"], G:["Dark Green","#2C6B2F"],
+  l:["Lime","#A5CA18"], d:["Reddish Brown","#5B3A1D"], b:["Medium Nougat","#AA7D55"], n:["Nougat","#D09168"],
+  N:["Dark Nougat","#B07C55"], t:["Tan","#DEC69C"], s:["Light Gray","#A0A5A9"], S:["Dark Gray","#6C6E68"],
+  c:["Medium Azure","#36AEBF"], C:["Dark Azure","#1E7C99"], r:["Red","#C91A09"], R:["Dark Red","#720E0F"],
+  p:["Bright Pink","#E4ADC8"], P:["Dark Pink","#C870A0"], u:["Dark Blue","#0A3463"], y:["Yellow","#F2CD37"],
+  o:["Orange","#FE8A18"]
+};
+const px=(g,size)=>{
+  const h=g.length,w=g[0].length,o=[];
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const ch=g[y][x];
+    if(ch==="."||!COL[ch])continue;
+    o.push('<rect x="'+x+'" y="'+y+'" width="1.02" height="1.02" fill="'+COL[ch][1]+'"/>');}
+  return '<svg viewBox="0 0 '+w+' '+h+'" width="'+size+'" height="'+size+'" aria-hidden="true">'+o.join("")+"</svg>";
+};
+
+/* ── moods ──────────────────────────────────────────── */
+const MOODS=[
+  {id:"quick",  label:"Ten minutes", c:"--honey", t:"--honey-t", i:["SSSSSSS",".yyyyy.","..yyy..","...y...","..y.y..",".yyyyy.","SSSSSSS"]},
+  {id:"build",  label:"Cozy build",  c:"--moss",  t:"--moss-t",  i:["...r...","..rrr..",".rrrrr.","rrrrrrr",".ttttt.",".tdddt.",".tdddt."]},
+  {id:"race",   label:"Race me",     c:"--berry", t:"--berry-t", i:["d......","drrrr..","drrrrr.","drrrr..","d......","d......","ddd...."]},
+  {id:"silly",  label:"Be silly",    c:"--lilac", t:"--lilac-t", i:[".yyyyy.","yyyyyyy","ykyyyky","yyyyyyy","yykkkyy","yyyyyyy",".yyyyy."]},
+  {id:"explore",label:"Go somewhere",c:"--sky",   t:"--sky-t",   i:[".......","...w...","..www..","..GGG..",".GGGGG.","GGGGGGG","..l.l.."]},
+  {id:"sweet",  label:"Just us",     c:"--berry", t:"--berry-t", i:[".rr.pp.","rrrpppp","rrrpppp",".rrppp.","..rpp..","...p...","......."]}
+];
+const MOOD=Object.fromEntries(MOODS.map(m=>[m.id,m]));
+
+/* ── the ideas ──────────────────────────────────────── */
+const IDEAS=[
+  {t:"Go get a cat", m:["explore","sweet"], time:"about 30 min", who:"Together",
+   why:"You come home with a cat. That's the whole pitch.",
+   how:["Find a village — cats wander around them, mostly at night.",
+        "Catch a raw cod or salmon with a fishing rod first.",
+        "Hold the fish out, crouch down, and stand completely still.",
+        "Wait. When hearts pop, it's yours. Name it something silly."]},
+
+  {t:"Ten-minute mine", m:["quick","race"], time:"10 min", who:"Race",
+   why:"Set a timer, dig separately, empty your pockets on the table after.",
+   how:["Both grab a stone pickaxe, some torches, and food.",
+        "Split up and dig down (never straight down — go at an angle).",
+        "When the timer goes, come back wherever you are.",
+        "Lay everything out. Rarest single item wins."]},
+
+  {t:"Build each other a bedroom", m:["build","sweet"], time:"about 40 min", who:"Together",
+   why:"You don't get to see it until it's done. That's the fun part.",
+   how:["Agree on a spot and give each other a 7×7 square.",
+        "Wall it off so neither of you can peek.",
+        "Bed, light, one window, and one thing that's a joke about them.",
+        "Knock down the walls at the same time and swap."]},
+
+  {t:"Tame a wolf each", m:["explore","sweet"], time:"20 min", who:"Together",
+   why:"Two dogs, two people. They will follow you everywhere and get in the way.",
+   how:["Bring bones — skeletons drop them, so go out at night or into a cave.",
+        "Find wolves in a forest or taiga (the piney one).",
+        "Feed bones until a red collar appears.",
+        "Sit them down before a fight or they will absolutely die for you."]},
+
+  {t:"The five-by-five house", m:["build"], time:"20 min", who:"Race",
+   why:"A whole dream home that fits inside a cube the size of a shed.",
+   how:["Mark out a 5×5×5 cube each. Nothing may stick out of it.",
+        "Twenty minutes on the clock. Interiors count.",
+        "Tour each other's and score out of ten.",
+        "The loser has to live in theirs for a whole in-game day."]},
+
+  {t:"Name every animal", m:["silly","quick"], time:"15 min", who:"Together",
+   why:"Cheap, fast, and you'll be quoting the names for weeks.",
+   how:["Craft or trade for a few name tags — or use an anvil if you have one.",
+        "Every animal you own gets a name from the other person.",
+        "No vetoes. That's the rule that makes it good.",
+        "Name one 'Dinnerbone' and watch what happens."]},
+
+  {t:"Follow a river to the end", m:["explore"], time:"about 30 min", who:"Together",
+   why:"No goal, no timer. Just see where it goes and talk while you paddle.",
+   how:["Craft two boats and find any river near your base.",
+        "Pick a direction and follow it. Don't cut corners over land.",
+        "Place a torch anywhere that looks nice.",
+        "Wherever it ends, build a tiny shelter and sleep there."]},
+
+  {t:"Swap houses", m:["build","silly"], time:"20 min", who:"Together",
+   why:"Twenty minutes to renovate each other's place. Improvements only.",
+   how:["Trade coordinates and go to the other person's house.",
+        "You may add, decorate, and rearrange — never delete.",
+        "Come home, react honestly.",
+        "Each of you gets one veto. Use it wisely."]},
+
+  {t:"Find these nine things", m:["quick","race","explore"], time:"20 min", who:"Race", kind:"list",
+   why:"A tiny scavenger hunt. Tap them off as you find them.",
+   how:["Both of you look at this same list.",
+        "First to collect all nine wins. No trading with each other.",
+        "Tap an item here when you've got it in your inventory.",
+        "Tie broken by whoever also has the nicest hat."]},
+
+  {t:"Bee nursery", m:["build","sweet"], time:"about 30 min", who:"Together",
+   why:"Flowers, bees, honey. The single most pleasant thing to build in this game.",
+   how:["Find a bee nest in a flower forest or birch woods.",
+        "Use shears on a campfire's smoke below it so the bees stay calm.",
+        "Mine the nest with a Silk Touch pickaxe and carry it home.",
+        "Plant a lot of flowers around it, then put a campfire underneath."]},
+
+  {t:"One block only", m:["build","silly"], time:"20 min", who:"Race",
+   why:"Scroll your inventory with your eyes shut. Whatever you stop on, that's your whole palette.",
+   how:["Close your eyes, scroll, stop. That block plus one light source.",
+        "Twenty minutes to build whatever you want out of it.",
+        "No mining a different block halfway through. We'll know.",
+        "Winner picks the next thing you do."]},
+
+  {t:"Walk backwards", m:["silly","quick"], time:"10 min", who:"Together",
+   why:"Ten minutes of nothing but reverse. It gets funny at about minute three.",
+   how:["Ten minutes on a timer, starting now.",
+        "You may only hold the back key. No turning the camera to cheat.",
+        "Keep playing normally otherwise. Yes, including combat.",
+        "Anyone who forgets owes the other a snack."]},
+
+  {t:"Build the tallest thing you can", m:["build","race"], time:"15 min", who:"Race",
+   why:"Straight up. Whoever is higher when the clock runs out wins.",
+   how:["Both start on the same block with the same stack of dirt.",
+        "Jump and place under yourself. Fifteen minutes.",
+        "Whoever's higher wins — but you have to get down alive.",
+        "Bring a water bucket or a lot of confidence."]},
+
+  {t:"Underwater room", m:["build"], time:"about 40 min", who:"Together",
+   why:"A dry glass room at the bottom of the ocean, with a window and a bed.",
+   how:["Find a decent ocean and take a lot of sand for glass, plus doors.",
+        "Dig out a pocket and wall it in glass — the water pushes out as you seal it.",
+        "Doors and signs hold water back too. Handy for the entrance.",
+        "Put the bed facing the window."]},
+
+  {t:"Photo safari", m:["explore","quick"], time:"25 min", who:"Race",
+   why:"Screenshot eight different mobs without killing a single one.",
+   how:["Eight different creatures, one screenshot each.",
+        "The animal has to fill a decent chunk of the picture.",
+        "Hostile ones count double, if you're brave.",
+        "Show each other at the end and pick a favorite shot."]},
+
+  {t:"Speedrun the dumb way", m:["silly","race"], time:"30 min", who:"Race",
+   why:"First to reach diamonds — but you may only ever move by jumping.",
+   how:["Fresh start, empty pockets, both go at once.",
+        "You may not walk. Every single step is a jump.",
+        "First to hold a diamond wins.",
+        "Anyone caught walking goes back to the surface."]},
+
+  {t:"Fireworks show", m:["sweet","build"], time:"about 30 min", who:"Together",
+   why:"Build a real show, then sit on a roof and set it off together.",
+   how:["Gather gunpowder (skeletons and creepers at night) and paper and dye.",
+        "Craft firework stars with the dyes you like, then rockets from them.",
+        "Line up dispensers, wire them with redstone, aim them at the sky.",
+        "Turn the brightness down, sit somewhere high, press the button."]},
+
+  {t:"Whoever dies first loses", m:["race","silly"], time:"one evening", who:"Race",
+   why:"Play the whole night however you want. First death ends it.",
+   how:["Start whenever. Play totally normally.",
+        "The first person to die loses the entire evening.",
+        "You are allowed to be an enormous coward. Encouraged, even.",
+        "Loser makes tea. That's the stake."]},
+
+  {t:"Move in together", m:["build","sweet"], time:"one evening", who:"Together",
+   why:"Abandon both your bases and build one home you'd both actually live in.",
+   how:["Walk until you find somewhere you both like. Actually agree.",
+        "Two floors minimum. One room each that the other doesn't design.",
+        "Real storage, real lighting, and a window worth sitting at.",
+        "Sleep in it the same night, even if it isn't finished."]},
+
+  {t:"Blind build", m:["build","silly"], time:"25 min", who:"Together",
+   why:"One of you describes a real building from memory. The other builds it.",
+   how:["Pick a famous building. Don't look it up. Memory only.",
+        "Describe it out loud while the other person builds, no peeking.",
+        "Twenty-five minutes, then look at the real thing together.",
+        "Swap roles and go again."]},
+
+  {t:"Ride something ridiculous", m:["silly","explore"], time:"20 min", who:"Together",
+   why:"A saddled pig, a strider, a boat full of a cow. Your choice.",
+   how:["Craft a saddle or find one in a chest — dungeons and villages have them.",
+        "Pig plus saddle plus carrot on a stick equals transport. Technically.",
+        "Striders work the same way in the Nether, with a warped fungus.",
+        "Race each other. Give up. Laugh. That's the activity."]},
+
+  {t:"Fifteen-minute farm", m:["quick","build"], time:"15 min", who:"Together",
+   why:"Small, useful, and you'll be glad about it for the next fifty hours.",
+   how:["Pick one: wheat, carrots, pumpkins, or sugar cane.",
+        "Water in the middle, tilled dirt four blocks out in each direction.",
+        "Fence it in so nothing tramples it, and light it so it grows overnight.",
+        "Plant the whole thing before the timer goes."]},
+
+  {t:"Cave date", m:["explore","sweet"], time:"about 40 min", who:"Together",
+   why:"Go down a cave with one shared torch supply and no plan.",
+   how:["One of you carries all the torches. The other carries all the food.",
+        "You must stay within shouting distance the whole time.",
+        "Light everything as you go — you're making it nice, not rushing.",
+        "Turn back when the food runs out, not when you get scared."]},
+
+  {t:"Terrarium in a box", m:["build","quick"], time:"20 min", who:"Race",
+   why:"A tiny complete biome sealed inside a 7×7 glass cube.",
+   how:["Build a hollow 7×7×7 glass box.",
+        "Fill it with one biome — sand and cactus, or moss and flowers, or snow.",
+        "One living thing inside that survives to judging.",
+        "Set them side by side and pick a winner."]},
+
+  {t:"Bring back the weirdest thing", m:["explore","quick"], time:"25 min", who:"Race",
+   why:"Twenty-five minutes. Come back with the strangest item you can find.",
+   how:["Split up. Anywhere is fair game.",
+        "Rarity doesn't matter. Weirdness does.",
+        "Come back and make your case for why yours is stranger.",
+        "The other person decides. Arguing is part of it."]},
+
+  {t:"Read the map", m:["explore"], time:"about 45 min", who:"Together",
+   why:"Buy a treasure map from a villager and actually go dig it up.",
+   how:["Find a cartographer villager in a village (or make one with a table).",
+        "Trade emeralds for an explorer map — ocean monument or woodland mansion.",
+        "The white dot is you. Sail toward the marker.",
+        "Bring boats, food, and low expectations. Go anyway."]},
+
+  {t:"Nine lives", m:["silly","race"], time:"one evening", who:"Race",
+   why:"You each get nine deaths for the whole night. Spend them carefully.",
+   how:["Count out loud every time either of you dies.",
+        "At nine, you're a ghost — you can watch and talk but not play.",
+        "The survivor gets to name one thing in the world permanently.",
+        "Fall damage counts. Fire counts. Everything counts."]},
+
+  {t:"Decorate for the season", m:["build","sweet"], time:"about 30 min", who:"Together",
+   why:"Whatever month it actually is out there, put it in the world.",
+   how:["Pick the season it is right now in real life.",
+        "Both decorate the outside of your house for it — leaves, snow, lanterns.",
+        "No talking about what you're planning first.",
+        "Take a screenshot at dusk with the lights on."]},
+
+  {t:"Portal to nowhere", m:["explore","build"], time:"about 30 min", who:"Together",
+   why:"Build a nether portal somewhere absurd and see where it drops you.",
+   how:["Get obsidian (lava plus a water bucket plus a diamond pickaxe).",
+        "Build the frame somewhere with a terrible view. That's the point.",
+        "Light it, hold hands metaphorically, and step through together.",
+        "Whatever's on the other side, build a little shelter and come back."]},
+
+  {t:"Trading post", m:["build","quick"], time:"25 min", who:"Together",
+   why:"A little stall with two villagers in it. Suddenly emeralds mean something.",
+   how:["Find two villagers and move them somewhere safe (boats work).",
+        "Put a lectern and a composter next to them — they'll take those jobs.",
+        "Build a small stall around them with a counter.",
+        "Trade until one of you runs out of paper. It'll happen fast."]}
+];
+
+/* ── scavenger pool ─────────────────────────────────── */
+const FINDS=["Bone","Feather","Egg","Cactus","Sugar Cane","Pumpkin","Clay Ball","Flint","Snowball","Red Mushroom",
+  "Ink Sac","Slimeball","Cocoa Beans","Lily Pad","Sweet Berries","Honeycomb","Glow Berries","Cobweb","Poisonous Potato",
+  "Tropical Fish","Bamboo","Amethyst Shard","Copper Ingot","Lapis Lazuli","Redstone Dust","Gold Ingot","Dried Kelp","Sea Pickle"];
+
+/* ── slow quests ────────────────────────────────────── */
+const SLOW=[
+  {id:"seven", name:"Seven Nights", c:"--moss", t:"--moss-t",
+   blurb:"A week in one world, one step a night. Ends with the dragon.",
+   days:[
+    {t:"Find home",  k:"Wander together until you both like a spot. Build a little shack each, close enough to see the other's door. Stone tools only tonight."},
+    {t:"Iron night", k:"Nobody sleeps until you're both wearing full iron. Share what you dig up. Take the deep route."},
+    {t:"Something to eat", k:"Build one crop farm and one animal pen. Then — this bit isn't optional — cook something real in your actual kitchen while it grows."},
+    {t:"Down the portal", k:"Light a portal and go through together. Come back with quartz and glowstone, and both of you alive."},
+    {t:"Trade day", k:"Get three villagers working three different jobs. Trade for one thing you couldn't have made yourselves, and put it where you'll both see it."},
+    {t:"The house", k:"Leave the shacks behind. Build one home you both actually want. Two floors, real storage, a window worth sitting at. Take the whole evening."},
+    {t:"The dragon", k:"Full gear, beds, blocks, water bucket. One attempt. Whatever happens, you built a world in a week."}
+   ]},
+  {id:"museum", name:"Museum of Us", c:"--lilac", t:"--lilac-t",
+   blurb:"Eight nights, eight rooms, each one about something real.",
+   days:[
+    {t:"The entrance", k:"Build the lobby and a statue of how you two met. It only has to make sense to one other person on earth."},
+    {t:"First date room", k:"Recreate the place. Get some details wrong on purpose and argue about which ones."},
+    {t:"The silly wing", k:"A monument to the dumbest thing you've ever disagreed about. Full plaque. Both sides represented, badly."},
+    {t:"Food court", k:"Recreate your favourite shared meal in blocks, at absurd scale. Then order it in real life and eat it in front of the build."},
+    {t:"Travel gallery", k:"One room for somewhere you've been together, one for somewhere you haven't. Make the second one nicer."},
+    {t:"The menagerie", k:"Every pet you have, have had, or are campaigning for. Real ones get name tags."},
+    {t:"The future floor", k:"Build where you want to be in five years. No rules about realism. Put a bed in it."},
+    {t:"Opening night", k:"Light everything, sign every room, set off fireworks at the door, then give each other a full guided tour in character as museum staff."}
+   ]},
+  {id:"road", name:"The Long Road", c:"--honey", t:"--honey-t",
+   blurb:"Two far-apart points, seven nights of building toward each other.",
+   days:[
+    {t:"Set the ends", k:"Pick two spots at least 1,500 blocks apart and build a gate at each. Agree on the road: three wide, lit both sides."},
+    {t:"First stretch", k:"Each of you builds toward the other. Stop when you run out of materials, not patience."},
+    {t:"Through, not around", k:"Whatever's in the way tonight, go through it properly. No detours around the mountain."},
+    {t:"Rest stop", k:"Build a small shelter with a bed, a chest, and a crafting table wherever you got to. Give it a name."},
+    {t:"The hard bit", k:"Ocean, ravine, or badlands — take on the section you've both been avoiding. Help whoever drew the worse half."},
+    {t:"Lights on", k:"Walk everything you've laid, end to end, and make it properly lit and mob-proof. Fix what you find."},
+    {t:"The meeting", k:"Place the last block at the same time. Then build the halfway inn right there — two beds, a fireplace, a sign with today's date."}
+   ]},
+  {id:"bricks", name:"Bricks & Blocks", c:"--sky", t:"--sky-t",
+   blurb:"Five nights bouncing between the screen and the carpet.",
+   days:[
+    {t:"Build the creeper", k:"Both of you build the Creeper Face from the Bricks tab. Race it. Swap colours freely — whoever finishes first picks tomorrow's build."},
+    {t:"Scale it up", k:"Take last night's LEGO build into Minecraft at four times the size. One stud becomes a 4×4 wall. Light it from behind."},
+    {t:"Screenshot only", k:"One of you builds something small in the game and sends only a picture. The other reproduces it in LEGO with nothing else to go on."},
+    {t:"Two hands, one build", k:"Pick the Grass Block or the Sword and build it as a team — one reads the plan out loud, the other places every piece. Swap halfway."},
+    {t:"Photo night", k:"Set the LEGO build next to the screen showing the Minecraft one. Take the photo. That's the whole objective, and it's a good one."}
+   ]}
+];
+
+/* ── brick builds ───────────────────────────────────── */
+const BUILDS=[
+  {id:"creeper", name:"Creeper", tier:"Easiest one", blurb:"Sixty-four studs, three colours, recognisable from across the room.",
+   note:"Build it flat on an 8×8 plate or straight onto a baseplate. Any green works, just keep it consistent.",
+   layers:[{n:"Face",g:["gggggggg","gkkggkkg","gkkggkkg","gggkkggg","ggkkkkgg","ggkkkkgg","ggkggkgg","gggggggg"]}]},
+  {id:"heart", name:"Heart", tier:"Easy", blurb:"The white highlight in the corner is what makes it look like the game instead of a valentine.",
+   note:"Small enough to build twice and keep one each.",
+   layers:[{n:"Heart",g:[".RRR.RRR.","RwwRRRrrR","RwwrrrrrR","RwrrrrrrR","RrrrrrrrR",".RrrrrrR.","..RrrrR..","...RrR...","....R...."]}]},
+  {id:"torch", name:"Torch", tier:"Five minutes", blurb:"Twenty studs. Build four and put one in each corner of the shelf.",
+   note:"Layers 1–4 are the stick, layer 5 is the flame. A see-through orange piece on top looks great if you have one.",
+   layers:[{n:"1",g:["bb","bb"]},{n:"2",g:["bb","bb"]},{n:"3",g:["bb","bb"]},{n:"4",g:["bb","bb"]},{n:"5 flame",g:["oy","yo"]}]},
+  {id:"bee", name:"Bee", tier:"Medium", blurb:"Side view, facing left. The eyes take up half the head, which is correct.",
+   note:"Clear or white wings both work. If you have transparent pieces, use them.",
+   layers:[{n:"Bee",g:["............",".....wwww...","....wwwwww..",".....wwww...","..kkyykkyyk.",".wwkyykkyykk",".wwkyykkyykk","..kkyykkyyk.","...k.k..k.k.","............","............","............"]}]},
+  {id:"sword", name:"Diamond Sword", tier:"Medium", blurb:"The darker blue stripe down the middle of the blade is doing all the work.",
+   note:"About 62 studs on a 16×16 plate. The blank squares stay as bare baseplate — that's the plan, not a mistake.",
+   layers:[{n:"Sword",g:[".......cc.......","......cccc......","......cCcc......","......cCcc......","......cCcc......","......cCcc......","......cCcc......","......cCcc......","......cCcc......","......cCcc......","....dddddddd....","....dddddddd....",".......dd.......",".......dd.......","......dddd......","................"]}]},
+  {id:"grass", name:"Grass Block", tier:"The 3D one", blurb:"Six stacked layers on a 6×6 base, with the grass fringe wrapping over the top edge.",
+   note:"Stacked flat plates make a slab, not a cube. For real block shape, build layers 1–4 as two rows of normal bricks, then cap with 5 and 6 in plates.",
+   layers:[{n:"1",g:["dddddd","dddddd","dddddd","dddddd","dddddd","dddddd"]},
+           {n:"2",g:["dddddd","dddddd","dddddd","dddddd","dddddd","dddddd"]},
+           {n:"3",g:["dddddd","dddddd","dddddd","dddddd","dddddd","dddddd"]},
+           {n:"4",g:["dddddd","dddddd","dddddd","dddddd","dddddd","dddddd"]},
+           {n:"5 fringe",g:["gggggg","gddddg","gddddg","gddddg","gddddg","gggggg"]},
+           {n:"6 top",g:["gggggg","gggGgg","gggggg","gGgggg","gggggG","gggggg"]}]}
+];
+
+const STICKERS=[
+  ["..ccc..",".ccccc.","ccccccc",".ccccc.","..ccc..","...c...","......."],
+  [".rr.rr.","rrrrrrr","rrrrrrr",".rrrrr.","..rrr..","...r...","......."],
+  ["..ooo..","..oyo..","..ooo..","...d...","...d...","...d...","...d..."],
+  ["..p.p..",".ppppp.",".pyyyp.",".ppppp.","..p.p..","...l...","...l..."],
+  ["...y...","...y...",".yyyyy.","yyyyyyy",".yyyyy.","..y.y..",".y...y."],
+  ["ggggggg","gkkgkkg","gkkgkkg","ggkkkgg","gkkkkkg","gkgkgkg","ggggggg"]
+];
+
+/* ── state ──────────────────────────────────────────── */
+const KEY="ourBlockNight.v1";
+const DEF={tab:"tonight",mood:null,idea:null,finds:[],got:[],done:[],recent:[],slow:null,prog:{},build:"creeper",layer:0,flat:true};
+let S; try{S=Object.assign({},DEF,JSON.parse(localStorage.getItem(KEY)||"{}"));}catch(e){S=Object.assign({},DEF);}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+const today=()=>new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"});
+const rand=a=>a[Math.floor(Math.random()*a.length)];
+
+/* ── nav ────────────────────────────────────────────── */
+const TABS=[["tonight","Tonight"],["slow","Slow quests"],["bricks","Bricks"]];
+TABS.forEach(([id,label])=>{
+  const b=document.createElement("button");
+  b.type="button"; b.textContent=label; b.dataset.tab=id;
+  b.onclick=()=>{S.tab=id;save();paint();window.scrollTo({top:0});};
+  $("#seg").appendChild(b);
+});
+function paint(){
+  document.querySelectorAll("#seg button").forEach(b=>b.setAttribute("aria-current",String(b.dataset.tab===S.tab)));
+  TABS.forEach(([id])=>{const s=$("#s-"+id); if(s)s.hidden=(id!==S.tab);});
+  if(S.tab==="bricks"){sizePlate(); requestAnimationFrame(sizePlate);}
+}
+
+/* ── moods ──────────────────────────────────────────── */
+function renderMoods(){
+  const box=$("#moods"); box.innerHTML="";
+  MOODS.forEach(m=>{
+    const b=document.createElement("button");
+    b.type="button"; b.className="mood";
+    b.style.setProperty("--c","var("+m.c+")"); b.style.setProperty("--t","var("+m.t+")");
+    b.innerHTML=px(m.i,26)+"<span>"+m.label+"</span>";
+    b.setAttribute("aria-pressed",String(S.mood===m.id));
+    b.onclick=()=>{S.mood=(S.mood===m.id?null:m.id); save(); renderMoods(); pick();};
+    box.appendChild(b);
+  });
+}
+
+/* ── ideas ──────────────────────────────────────────── */
+function poolFor(){ return S.mood ? IDEAS.filter(i=>i.m.includes(S.mood)) : IDEAS; }
+function pick(){
+  const p=poolFor();
+  let avail=p.filter(i=>!S.recent.includes(i.t));
+  if(!avail.length){S.recent=[]; avail=p;}
+  const i=rand(avail);
+  S.idea=i.t; S.recent.push(i.t);
+  if(S.recent.length>Math.max(4,Math.floor(p.length*0.5)))S.recent.shift();
+  if(i.kind==="list"){
+    const pool=FINDS.slice();
+    S.finds=[]; for(let n=0;n<9;n++)S.finds.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+    S.got=[];
+  }
+  save(); renderIdea(true);
+}
+function renderIdea(fresh){
+  const box=$("#ideaBox");
+  const i=IDEAS.find(x=>x.t===S.idea);
+  if(!i){ box.innerHTML='<p class="empty">Tap the button and we’ll pick something.</p>'; return; }
+  const m=MOOD[i.m[0]];
+  let h='<div class="idea'+(fresh?" new":"")+'" style="--c:var('+m.c+');--t:var('+m.t+')">'+
+    '<div class="tagline">'+px(m.i,19)+'<span class="pix">'+esc(m.label)+"</span></div>"+
+    "<h3>"+esc(i.t)+"</h3><p class='why'>"+esc(i.why)+"</p>";
+  if(i.kind==="list"){
+    h+='<div class="finds">'+S.finds.map((f,n)=>
+      '<button type="button" class="find" data-f="'+n+'" aria-pressed="'+(S.got.includes(n))+'">'+esc(f)+"</button>").join("")+"</div>";
+  }
+  h+='<div class="how"><span class="pix">How to do it</span><ol>'+i.how.map(s=>"<li>"+esc(s)+"</li>").join("")+"</ol></div>"+
+     '<div class="tags"><span class="tag">'+esc(i.time)+'</span><span class="tag">'+esc(i.who)+"</span></div>"+
+     '<div class="pair"><button type="button" class="b1" id="didIt">We did it</button>'+
+     '<button type="button" class="b2" id="another">Something else</button></div></div>';
+  box.innerHTML=h;
+  $("#another").onclick=pick;
+  $("#didIt").onclick=()=>{
+    S.done.unshift({t:i.t,d:today()});
+    if(S.done.length>60)S.done.pop();
+    save(); renderShelf(); pick();
+  };
+  box.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{
+    const n=+b.dataset.f, k=S.got.indexOf(n);
+    if(k<0)S.got.push(n); else S.got.splice(k,1);
+    save(); renderIdea(false);
+  });
+}
+
+function renderShelf(){
+  const box=$("#shelf");
+  if(!S.done.length){
+    box.innerHTML='<span class="pix">Your shelf</span><p class="last" style="color:var(--ink3)">Empty for now. Every time you finish something, a little sticker lands here.</p>';
+    return;
+  }
+  const stick=S.done.slice(0,16).map((d,n)=>'<span class="st" title="'+esc(d.t)+'">'+px(STICKERS[(d.t.length+n)%STICKERS.length],22)+"</span>").join("");
+  box.innerHTML='<span class="pix">Your shelf &middot; '+S.done.length+' done</span><div class="stickers">'+stick+"</div>"+
+    '<p class="last">Last one: <b>'+esc(S.done[0].t)+"</b>, "+esc(S.done[0].d)+".</p>";
+}
+
+/* ── slow quests ────────────────────────────────────── */
+function renderSlow(){
+  const box=$("#slowBody");
+  const q=SLOW.find(x=>x.id===S.slow);
+  if(!q){
+    box.innerHTML='<div class="ask"><h2>Slow quests</h2><p>One step a night, over a whole week. Pick one and it remembers where you got to.</p></div>'+
+      '<div class="qpick">'+SLOW.map(c=>{
+        const n=S.prog[c.id]||0;
+        return '<button type="button" class="qcard" data-q="'+c.id+'" style="--c:var('+c.c+');--t:var('+c.t+')">'+
+          '<span class="ring">'+n+"/"+c.days.length+'</span><span class="n"><h3>'+esc(c.name)+"</h3><p>"+esc(c.blurb)+"</p></span></button>";
+      }).join("")+"</div>";
+    box.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{S.slow=b.dataset.q;save();renderSlow();window.scrollTo({top:0});});
+    return;
+  }
+  const n=S.prog[q.id]||0, finished=n>=q.days.length;
+  const day=q.days[Math.min(n,q.days.length-1)];
+  let h='<button type="button" class="backlink" id="back">&larr; All slow quests</button>'+
+    '<div class="ask"><h2>'+esc(q.name)+"</h2><p>"+esc(q.blurb)+"</p></div>"+
+    '<div class="dots">'+q.days.map((d,i)=>'<span class="dot '+(i<n?"on":i===n?"now":"")+'" style="--c:var('+q.c+');--t:var('+q.t+')"></span>').join("")+"</div>";
+  if(finished){
+    h+='<div class="idea" style="--c:var('+q.c+');--t:var('+q.t+')"><div class="tagline"><span class="pix">All done</span></div>'+
+       "<h3>You finished it</h3><p class='why'>All "+q.days.length+" nights of "+esc(q.name)+". That happened, and you did it together.</p>"+
+       '<div class="pair"><button type="button" class="b2" id="reset">Start it again</button></div></div>';
+  }else{
+    h+='<div class="idea new" style="--c:var('+q.c+');--t:var('+q.t+')">'+
+       '<div class="tagline"><span class="pix">Night '+(n+1)+" of "+q.days.length+"</span></div>"+
+       "<h3>"+esc(day.t)+"</h3>"+
+       '<div class="how"><span class="pix">Tonight</span><ol><li>'+esc(day.k)+"</li></ol></div>"+
+       '<div class="pair"><button type="button" class="b1" id="nextDay">We did tonight</button>'+
+       (n>0?'<button type="button" class="b2" id="backDay">Back a night</button>':"")+"</div></div>";
+  }
+  box.innerHTML=h;
+  $("#back").onclick=()=>{S.slow=null;save();renderSlow();};
+  const nd=$("#nextDay"); if(nd)nd.onclick=()=>{S.prog[q.id]=n+1; S.done.unshift({t:q.name+" · "+day.t,d:today()}); save(); renderSlow(); renderShelf();};
+  const bd=$("#backDay"); if(bd)bd.onclick=()=>{S.prog[q.id]=n-1;save();renderSlow();};
+  const rs=$("#reset"); if(rs)rs.onclick=()=>{S.prog[q.id]=0;save();renderSlow();};
+}
+
+/* ── bricks ─────────────────────────────────────────── */
+const PLATES=[[2,8],[8,2],[2,6],[6,2],[1,8],[8,1],[2,4],[4,2],[2,3],[3,2],[1,6],[6,1],[1,4],[4,1],[2,2],[1,3],[3,1],[1,2],[2,1],[1,1]];
+function tile(grid){
+  const h=grid.length,w=grid[0].length;
+  const used=Array.from({length:h},()=>new Array(w).fill(false)), out=[];
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const ch=grid[y][x];
+    if(used[y][x]||ch==="."||!COL[ch])continue;
+    for(const [pw,ph] of PLATES){
+      if(x+pw>w||y+ph>h)continue;
+      let ok=true;
+      for(let dy=0;dy<ph&&ok;dy++)for(let dx=0;dx<pw;dx++){
+        if(used[y+dy][x+dx]||grid[y+dy][x+dx]!==ch){ok=false;break;}
+      }
+      if(!ok)continue;
+      for(let dy=0;dy<ph;dy++)for(let dx=0;dx<pw;dx++)used[y+dy][x+dx]=true;
+      out.push({x,y,w:pw,h:ph,c:ch}); break;
+    }
+  }
+  return out;
+}
+const theBuild=()=>BUILDS.find(b=>b.id===S.build)||BUILDS[0];
+function sizePlate(){
+  const b=theBuild(), g=b.layers[Math.min(S.layer,b.layers.length-1)].g;
+  const box=document.querySelector(".plate-box"); if(!box)return;
+  const cell=Math.max(11,Math.min(30,Math.floor((box.clientWidth-44-20-6)/g[0].length)));
+  $("#plan").style.setProperty("--cell",cell+"px");
+}
+function renderBricks(){
+  const b=theBuild();
+  if(S.layer>=b.layers.length)S.layer=0;
+
+  const pick=$("#buildPick"); pick.innerHTML="";
+  BUILDS.forEach(x=>{
+    const c=document.createElement("button");
+    c.type="button"; c.className="chip"; c.textContent=x.name;
+    c.setAttribute("aria-pressed",String(x.id===S.build));
+    c.onclick=()=>{S.build=x.id;S.layer=0;save();renderBricks();};
+    pick.appendChild(c);
+  });
+
+  const lt=$("#layerTabs"); lt.innerHTML="";
+  if(b.layers.length>1) b.layers.forEach((L,i)=>{
+    const t=document.createElement("button");
+    t.type="button"; t.className="lay"; t.textContent="Layer "+L.n;
+    t.setAttribute("aria-pressed",String(i===S.layer));
+    t.onclick=()=>{S.layer=i;save();renderBricks();};
+    lt.appendChild(t);
+  });
+
+  const g=b.layers[S.layer].g, W=g[0].length, H=g.length, pieces=tile(g);
+  let top='<div class="rt">'; for(let x=0;x<W;x++)top+="<i>"+(x+1)+"</i>"; top+="</div>";
+  let left='<div class="rl">'; for(let y=0;y<H;y++)left+="<i>"+(y+1)+"</i>"; left+="</div>";
+  let plate='<div class="plate'+(S.flat?" flat":"")+'" style="width:calc(var(--cell)*'+W+');height:calc(var(--cell)*'+H+')">';
+  pieces.forEach(p=>{
+    plate+='<div class="pc" style="left:calc(var(--cell)*'+p.x+");top:calc(var(--cell)*"+p.y+
+      ");width:calc(var(--cell)*"+p.w+");height:calc(var(--cell)*"+p.h+");background-color:"+COL[p.c][1]+'"></div>';
+  });
+  plate+="</div>";
+  $("#plan").innerHTML=top+'<div class="prow">'+left+plate+"</div>";
+  $("#viewToggle").textContent=S.flat?"Show the brick plan":"Show the picture";
+  sizePlate();
+
+  const counts={};
+  pieces.forEach(p=>{const a=Math.min(p.w,p.h),z=Math.max(p.w,p.h); const k=p.c+"|"+a+"×"+z; counts[k]=(counts[k]||0)+1;});
+  const rows=Object.entries(counts).map(([k,n])=>{
+    const [c,size]=k.split("|"); const area=size.split("×").reduce((a,b)=>a*b,1);
+    return {c,size,n,area,weight:n*area};
+  }).sort((a,b)=>b.weight-a.weight||b.area-a.area);
+  const studs=pieces.reduce((s,p)=>s+p.w*p.h,0);
+  const layerBit=b.layers.length>1?" · layer "+(S.layer+1)+" of "+b.layers.length:"";
+
+  $("#parts").innerHTML="<h3>What you'll need</h3>"+
+    '<p class="sub">'+esc(b.tier)+" · "+W+"×"+H+" studs"+layerBit+" · "+pieces.length+" pieces, "+studs+" studs</p>"+
+    '<p class="sub" style="margin-top:8px">'+esc(b.blurb)+"</p><ul>"+
+    rows.map(r=>'<li><span class="sw" style="background:'+COL[r.c][1]+'"></span><span class="nm">'+
+      esc(COL[r.c][0])+" · "+r.size+' plate</span><span class="q">'+r.n+"</span></li>").join("")+
+    '</ul><p class="tiny">'+esc(b.note)+" Swap any colour for what you actually own — it still reads.</p>";
+}
+
+/* ── go ─────────────────────────────────────────────── */
+$("#go").onclick=pick;
+$("#viewToggle").onclick=()=>{S.flat=!S.flat;save();renderBricks();};
+window.addEventListener("resize",()=>{if(S.tab==="bricks")sizePlate();});
+renderMoods(); renderIdea(false); renderShelf(); renderSlow(); renderBricks(); paint();
+</script>

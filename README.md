@@ -593,6 +593,41 @@ The "seen it" flag lives in `SharedPreferences`, not in Room: it isn't data abou
 a display detail, and restoring a backup should not make her sit through the introduction
 again.
 
+## The sky
+
+Every screen's background is the sky over Laval, right now. `Modifier.sky()` replaces what
+used to be a flat `Pal.Mist` fill, so it's one token per screen and no structural change.
+
+**It stays pale, always — including at night.** That isn't timidity about colour: every
+label in the app is dark plum on cream, and a real night sky would make each one
+unreadable. So the sky reads through its *hue* — peach at dawn, pale blue at noon, rose at
+dusk, lavender at night — and the celestial bodies are painted **darker than the
+background** rather than the usual white. It's the inverse of a real sky, and it's the only
+way to have one behind text. Everything fades into `Pal.Mist` before the halfway mark,
+where the content starts.
+
+`Sky.kt` is pure functions of the clock — no state, no data, no permissions — so sunrise
+and moon phase are unit-tested on the JVM like everything else. A wrong sunrise breaks
+nothing and would only be noticed one winter morning, opening the app in the dark under a
+midday sky.
+
+- **Sunrise and sunset** use the standard sunrise equation for 45.57°N. A fixed "6am" would
+  be wrong half the year: Laval sees the sun at 4:10 in June and 7:20 in December, and a sky
+  three hours out is worse than one that never moves.
+- **The moon is the real moon**, counted from a known new moon and the mean synodic month.
+  The crescent is cut out of the disc with `PathOperation.Difference`, not painted over —
+  the background is a gradient, so a solid patch would show.
+- **Rain follows Laval**, from Open-Meteo: no key, no account, no location permission, since
+  the coordinates are hard-coded. It's the only thing in the app that touches the network
+  and it's optional end to end — no connection, no rain, and nothing else changes.
+- **A shooting star** on roughly one night in seven, and only for twenty minutes. Being
+  brief is the whole point; a permanent one is just decoration.
+- **A rainbow**, usually after rain and very rarely without.
+- **Northern lights** on a few nights of each 28-day cycle. Nothing on screen names it,
+  labels it or comments on it, and nothing ever will — it isn't tracking and it isn't a
+  reminder. It's green and violet in the sky on days when that might be nice, and an
+  application has no business remarking on it.
+
 ## Cosmetics, chests and the locker
 
 One piece per **complete day**, never twice the same, permanent once earned. Fifty-five
@@ -986,10 +1021,28 @@ must. No writing to tags needed: the app matches on each tag's permanent factory
 
 ## The chart
 
-The history view plots **when** she took each dose against when it was due. A count of
-doses per week only says yes/no; the drift plot shows a 9am dose creeping toward 11am
-over two weeks, which is the pattern that comes *before* a missed one. Days with no log
-sit on the target line as hollow rings.
+The history view plots **when** she took each dose against the window it was due in. A
+count of doses per week only says yes/no; this shows a 9am dose creeping toward 11am over
+two weeks, which is the pattern that comes *before* a missed one. Days with no log sit at
+the window's start as hollow rings.
+
+**The axis is the window plus two hours either side.** A pill set from 6h to 8h gives an
+axis running 4h to 10h. It used to be *drift* from a single instant, fixed at ±2h, which
+had two problems now that a dose has a window: the window appeared nowhere on the chart,
+and a dose taken at 8h — perfectly on time — was drawn as "two hours late".
+
+Three things follow from plotting real clock time instead of an offset:
+
+- **The window is drawn as a band**, one segment per column rather than a continuous
+  ribbon, because a per-day schedule can differ from one day to the next. A stepped band
+  shows that; a single ribbon would hide it.
+- **Lateness is judged against the window's *end*.** That is the entire point of having a
+  window — a dose inside it is on time, and only that band decides the dot's colour.
+- **An outlier stretches the axis** rather than being clamped to the edge. A dot pinned to
+  the border would claim an hour that isn't its own.
+
+Each `DayPoint` carries its own day's window, so nothing is measured against a reference
+day that happens to be today.
 
 ## Tests
 

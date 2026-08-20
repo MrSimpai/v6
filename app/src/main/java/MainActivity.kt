@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 var showAdd by remember { mutableStateOf(false) }
+                var showSkyLab by remember { mutableStateOf(false) }
                 // Explicit Box: the celebration has to sit ON TOP of the home screen,
                 // not be laid out beside it.
                 androidx.compose.foundation.layout.Box(
@@ -112,7 +113,8 @@ class MainActivity : ComponentActivity() {
                             worn = state.value.dressed,
                             previewUntil = state.value.previewUntil,
                             onToggle = { id -> toggleCosmetic(id) },
-                            onCode = { startPreview(it) }
+                            onCode = { startPreview(it) },
+                            onOpenSkyLab = { showSkyLab = true }
                         )
                         2 -> SettingsScreen(
                             batteryRestricted = state.value.batteryRestricted,
@@ -198,6 +200,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 )
+
+                if (showSkyLab) SkyLabScreen(onClose = { showSkyLab = false })
 
                 // L'appairage prend toute la page tant qu'il dure.
                 state.value.pairing?.let { name ->
@@ -311,6 +315,8 @@ class MainActivity : ComponentActivity() {
      */
     private fun startPreview(code: String): Boolean {
         if (!Cosmetics.isPreviewCode(code)) return false
+        // Le même mot ouvre les deux : la cabine d'essayage et l'atelier du ciel.
+        SkyLab.unlocked.value = true
         state.value = state.value.copy(
             previewUntil = System.currentTimeMillis() + Cosmetics.PREVIEW_MINUTES * 60_000L,
             previewWorn = state.value.worn

@@ -59,7 +59,7 @@ fun PairTagScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(Pal.Mist)
+            .sky()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 26.dp)
             .padding(top = 36.dp, bottom = 32.dp),

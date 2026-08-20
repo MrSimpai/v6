@@ -43,7 +43,7 @@ fun WelcomeScreen(onDone: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxSize()
-            .background(Pal.Mist)
+            .sky()
             .padding(horizontal = 26.dp)
             .padding(top = 40.dp, bottom = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally

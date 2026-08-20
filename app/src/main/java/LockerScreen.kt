@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
@@ -37,6 +38,7 @@ fun LockerScreen(
     onToggle: (String) -> Unit,
     /** Rend vrai si le mot était le bon — c'est le seul retour que le champ obtient. */
     onCode: (String) -> Boolean,
+    onOpenSkyLab: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val previewing = previewUntil != null
@@ -52,12 +54,15 @@ fun LockerScreen(
     val collapse = (scroll.value / 300f).coerceIn(0f, 1f)
     val dragonSize = lerp(206.dp, 104.dp, collapse)
 
-    Column(modifier.fillMaxSize().background(Pal.Mist)) {
+    Column(modifier.fillMaxSize().sky()) {
 
         // ---- l'en-tête, qui ne bouge pas ----
         Surface(
-            color = Pal.Mist,
-            // L'ombre n'apparaît qu'une fois qu'il y a quelque chose à séparer.
+            // Transparent tant que rien n'est passé dessous : c'est en haut de l'écran que
+            // le ciel a ses couleurs, et un aplat opaque les masquerait entièrement. Dès
+            // qu'on défile, il devient opaque pour que la collection ne transparaisse pas
+            // à travers le dragon.
+            color = if (collapse > 0.02f) Pal.Mist else Color.Transparent,
             shadowElevation = if (collapse > 0.02f) 8.dp else 0.dp
         ) {
             Column(
@@ -144,6 +149,22 @@ fun LockerScreen(
 
             Spacer(Modifier.height(26.dp))
             PreviewCode(previewUntil, onCode)
+
+            // Le même mot ouvre la cabine d'essayage ET l'atelier du ciel. Il n'apparaît
+            // qu'une fois dit : avant, il n'y a rien à voir ici.
+            if (SkyLab.unlocked.value) {
+                Spacer(Modifier.height(10.dp))
+                Surface(
+                    color = Pal.Card, shape = Pill,
+                    modifier = Modifier.fillMaxWidth().clip(Pill).clickable { onOpenSkyLab() }
+                ) {
+                    Text(
+                        "Atelier du ciel ☁︎",
+                        style = Type.Label, color = Pal.Iris, textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)
+                    )
+                }
+            }
         }
     }
 }
