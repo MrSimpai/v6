@@ -598,13 +598,36 @@ again.
 Every screen's background is the sky over Laval, right now. `Modifier.sky()` replaces what
 used to be a flat `Pal.Mist` fill, so it's one token per screen and no structural change.
 
-**It stays pale, always — including at night.** That isn't timidity about colour: every
-label in the app is dark plum on cream, and a real night sky would make each one
-unreadable. So the sky reads through its *hue* — peach at dawn, pale blue at noon, rose at
-dusk, lavender at night — and the celestial bodies are painted **darker than the
-background** rather than the usual white. It's the inverse of a real sky, and it's the only
-way to have one behind text. Everything fades into `Pal.Mist` before the halfway mark,
-where the content starts.
+**It's a real sky, and the ink adapts to it.** The first version kept everything pale so it
+could never fight the text — and the result was a sky nobody noticed: a lavender night, a
+translucent aurora, a candy-pink sunrise. The fix wasn't to dim the sky, it was to move the
+text: `skyInk()` and `skyMuted()` return white when the sky is dark. So the night can be
+navy, the aurora can be a saturated green that lights the whole screen, and a sunset can
+actually be red.
+
+**There's a horizon**, two fifths down. Above it, sky, and the sun and moon really cross
+that line — `sunT` runs past 0 and 1, so the sun sits *below* the horizon before dawn and
+climbs through it. That single continuous track is what removed the jump between dawn and
+day, where the old code parked the sun at the edge of the screen for the whole twilight.
+Below the horizon is the season's ground, then a short fade to `Pal.Mist` for the content.
+
+`dark` (0 at noon, 1 at deep night) comes straight from the sun's altitude, so contrast,
+sky colour and cloud colour all move together with no steps.
+
+**The seasons are a place, not a tint.** Snow with evergreens and coloured lights in
+winter, green in spring and summer, rust-orange with falling leaves in autumn — a band of
+ground and a treeline read instantly, where four shades of sky did not.
+
+**Clouds take the light.** Near sunrise and sunset they're lit from underneath in pink,
+red and purple while the top of the sky is still blue, which is the thing that actually
+makes a Quebec October sky. They're seeded per day, so they stay put all day and differ
+tomorrow.
+
+One thing that had to be got right: `rememberSky()` is called once per background *and*
+once per adaptive text colour — a dozen times a page. The clock therefore lives in a single
+`SkyDriver()` at the top of the app. With the loops inside `rememberSky`, every call site
+would have advanced the workshop's clock on its own, and time would have run faster on
+busier pages.
 
 `Sky.kt` is pure functions of the clock — no state, no data, no permissions — so sunrise
 and moon phase are unit-tested on the JVM like everything else. A wrong sunrise breaks

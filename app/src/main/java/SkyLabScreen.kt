@@ -51,7 +51,7 @@ fun SkyLabScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             .padding(top = 26.dp, bottom = 40.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("ATELIER DU CIEL", style = Type.Label, color = Pal.Muted,
+            Text("ATELIER DU CIEL", style = Type.Label, color = skyMuted(),
                 modifier = Modifier.weight(1f))
             TextButton(onClick = onClose) {
                 Text("Fermer", style = Type.Label, color = Pal.Muted)

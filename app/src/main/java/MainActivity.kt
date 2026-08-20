@@ -72,6 +72,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MedTapTheme {
+                // L'horloge du ciel, une seule fois pour toute l'app.
+                SkyDriver()
+
                 // Les trente premières secondes, une seule fois dans la vie de l'app.
                 // Le drapeau vit dans les préférences et non dans la base : ce n'est pas
                 // une donnée d'elle, c'est un détail d'affichage, et une restauration de

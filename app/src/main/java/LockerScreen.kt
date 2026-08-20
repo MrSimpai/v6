@@ -71,9 +71,9 @@ fun LockerScreen(
                     .padding(horizontal = 20.dp)
                     .padding(top = 24.dp, bottom = 12.dp)
             ) {
-                Text("CASIER", style = Type.Label, color = Pal.Muted)
+                Text("CASIER", style = Type.Label, color = skyMuted())
                 Spacer(Modifier.height(4.dp))
-                Text("La garde-robe de ${Her.dragon}", style = Type.Title, color = Pal.Ink)
+                Text("La garde-robe de ${Her.dragon}", style = Type.Title, color = skyInk())
 
                 Spacer(Modifier.height(12.dp))
 

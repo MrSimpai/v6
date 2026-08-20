@@ -189,7 +189,7 @@ fun HomeScreen(
             // toute la nuit affiche encore la date d'hier au matin.
             SimpleDateFormat("EEEE d MMMM", Locale.CANADA_FRENCH).format(Date(now))
                 .uppercase(Locale.CANADA_FRENCH),
-            style = Type.Label, color = Pal.Muted
+            style = Type.Label, color = skyMuted()
         )
         Spacer(Modifier.height(6.dp))
         Text(
@@ -202,7 +202,7 @@ fun HomeScreen(
                 state.meds.isEmpty() -> "${Her.greeting()} — on commence ?"
                 else -> "${Her.greeting()}. Tout est à jour."
             },
-            style = Type.Display, color = Pal.Ink
+            style = Type.Display, color = skyInk()
         )
 
         // Une panne constatée, pas un risque. Elle a sa place sur l'écran d'accueil alors
@@ -250,13 +250,22 @@ fun HomeScreen(
         Spacer(Modifier.height(20.dp))
 
         // ---- hero: the mascot and the prompt ----
-        Surface(color = Pal.Card, shape = Soft, tonalElevation = 0.dp) {
+        //
+        // Le carton est resserré autour du dragon : marges réduites, mascotte à 150 dp,
+        // et une bande de chaque côté. Il occupait presque la moitié de la hauteur de
+        // l'écran en aplat blanc, ce qui recouvrait justement la partie du ciel où il se
+        // passe quelque chose — l'horizon, les nuages, l'astre. Le dragon n'y a rien
+        // perdu ; c'est le vide autour de lui qui est parti.
+        Surface(
+            color = Pal.Card, shape = Soft, tonalElevation = 0.dp,
+            modifier = Modifier.fillMaxWidth(0.9f).align(Alignment.CenterHorizontally)
+        ) {
             Column(
-                Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                Modifier.fillMaxWidth().padding(vertical = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Mascot(mood, Modifier.size(200.dp), worn = state.dressed)
-                Spacer(Modifier.height(8.dp))
+                Mascot(mood, Modifier.size(150.dp), worn = state.dressed)
+                Spacer(Modifier.height(4.dp))
                 // L'appairage a sa propre page maintenant : il n'a plus rien à dire ici.
                 AnimatedContent(targetState = mood, label = "prompt") { m ->
                     Text(
@@ -277,7 +286,7 @@ fun HomeScreen(
                 // Zéro ne s'affiche pas : « 0 journée complète » est un reproche, et les
                 // sept points disent déjà où on en est.
                 if (state.streak > 0) {
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         "${state.streak}",
                         style = Type.Display, color = Pal.Mint
@@ -291,7 +300,7 @@ fun HomeScreen(
                     )
                 }
                 if (state.week.size == 7) {
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(10.dp))
                     WeekDots(state.week)
                 }
                 // Ce que le NFC vient de répondre, quand ce n'était pas une dose : une

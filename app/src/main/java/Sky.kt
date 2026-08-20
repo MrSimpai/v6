@@ -47,10 +47,21 @@ object Sky {
         val phase: Phase,
         /** 0 à 1 À L'INTÉRIEUR de la phase : c'est lui qui fait glisser les couleurs. */
         val blend: Float,
-        /** La position de l'astre d'un bord à l'autre, 0 à gauche, 1 à droite. */
-        val traverse: Float,
-        /** Sa hauteur, 0 à l'horizon, 1 au zénith. */
-        val arc: Float,
+        /**
+         * La course du soleil : 0 au lever, 1 au coucher, et il SORT de cet intervalle.
+         *
+         * C'est ce débordement qui rend la transition continue. Avant, l'aube et le
+         * couchant étaient des paliers à part où l'astre restait planté au bord de
+         * l'écran ; ici le soleil monte depuis sous l'horizon, le traverse au lever, et
+         * repasse dessous au couchant sans qu'aucune étape ne saute.
+         */
+        val sunT: Float,
+        /** La même course pour la lune, du coucher au lever suivant. */
+        val moonT: Float,
+        /** 0 en plein jour, 1 au cœur de la nuit. Décide de tout le contraste. */
+        val dark: Float,
+        /** Le numéro du jour, pour semer ce qui doit rester stable toute la journée. */
+        val day: Long,
         /** 0 = nouvelle lune, 0,5 = pleine lune. */
         val moon: Float,
         val season: Season,
@@ -225,47 +236,47 @@ object Sky {
         val times = sunTimes(now)
         var phase = Phase.NIGHT
         var blend = 0.5f
-        var traverse = 0.5f
-        var arc = 0.5f
+        var sunT = -0.5f
+        var moonT = 0.5f
 
         if (times != null) {
             val (rise, set) = times
-            when {
-                now in (rise - TWILIGHT_MS)..(rise + TWILIGHT_MS) -> {
-                    phase = Phase.DAWN
-                    blend = ((now - rise + TWILIGHT_MS).toFloat() / (2 * TWILIGHT_MS))
-                    traverse = 0.04f
-                    arc = 0.04f
-                }
-                now in (set - TWILIGHT_MS)..(set + TWILIGHT_MS) -> {
-                    phase = Phase.DUSK
-                    blend = ((now - set + TWILIGHT_MS).toFloat() / (2 * TWILIGHT_MS))
-                    traverse = 0.96f
-                    arc = 0.04f
-                }
-                now in rise..set -> {
-                    phase = Phase.DAY
-                    val t = (now - rise).toFloat() / (set - rise).toFloat()
-                    blend = t; traverse = t; arc = sin(t * Math.PI).toFloat()
-                }
-                else -> {
-                    // La nuit enjambe minuit : elle va du coucher d'un jour au lever du
-                    // suivant, ce qui demande les heures du jour d'à côté.
-                    phase = Phase.NIGHT
-                    val from: Long
-                    val to: Long
-                    if (now > set) {
-                        from = set
-                        to = sunTimes(now + DAY_MS)?.first ?: (set + 10 * 3600_000L)
-                    } else {
-                        from = sunTimes(now - DAY_MS)?.second ?: (rise - 10 * 3600_000L)
-                        to = rise
-                    }
-                    val t = ((now - from).toFloat() / (to - from).toFloat()).coerceIn(0f, 1f)
-                    blend = t; traverse = t; arc = sin(t * Math.PI).toFloat()
-                }
+
+            // Une seule course continue, sans palier : le soleil est simplement SOUS
+            // l'horizon avant le lever et après le coucher. C'est ce qui supprime le saut
+            // qu'on voyait entre l'aube et le jour.
+            sunT = (now - rise).toFloat() / (set - rise).toFloat()
+
+            // La nuit enjambe minuit : du coucher d'un jour au lever du suivant.
+            val from: Long
+            val to: Long
+            if (now >= set) {
+                from = set
+                to = sunTimes(now + DAY_MS)?.first ?: (set + 10 * 3600_000L)
+            } else {
+                from = sunTimes(now - DAY_MS)?.second ?: (rise - 10 * 3600_000L)
+                to = rise
+            }
+            moonT = (now - from).toFloat() / (to - from).toFloat()
+
+            phase = when {
+                now in (rise - TWILIGHT_MS)..(rise + TWILIGHT_MS) -> Phase.DAWN
+                now in (set - TWILIGHT_MS)..(set + TWILIGHT_MS) -> Phase.DUSK
+                now in rise..set -> Phase.DAY
+                else -> Phase.NIGHT
+            }
+            blend = when (phase) {
+                Phase.DAWN -> (now - rise + TWILIGHT_MS).toFloat() / (2 * TWILIGHT_MS)
+                Phase.DUSK -> (now - set + TWILIGHT_MS).toFloat() / (2 * TWILIGHT_MS)
+                Phase.DAY -> sunT
+                Phase.NIGHT -> moonT.coerceIn(0f, 1f)
             }
         }
+
+        // La hauteur du soleil décide de tout le contraste, et elle est continue : le ciel
+        // s'assombrit donc en fondu au lieu de basculer d'un palier à l'autre.
+        val altitude = sin(sunT * Math.PI).toFloat()
+        val dark = (1f - (altitude + 0.14f) / 0.34f).coerceIn(0f, 1f)
 
         val season = forced.season ?: season(now)
         val (fallKind, fallAmount) = forced.falling?.let { it to (forced.fall ?: 0.7f) }
@@ -275,8 +286,10 @@ object Sky {
         return Moment(
             phase = phase,
             blend = blend.coerceIn(0f, 1f),
-            traverse = traverse.coerceIn(0f, 1f),
-            arc = arc.coerceIn(0f, 1f),
+            sunT = sunT,
+            moonT = moonT,
+            dark = dark,
+            day = dayIndex(now),
             moon = forced.moon ?: moonPhase(now),
             season = season,
             falling = fallKind,

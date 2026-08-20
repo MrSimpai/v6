@@ -65,9 +65,9 @@ fun PairTagScreen(
             .padding(top = 36.dp, bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("ÉTIQUETTE", style = Type.Label, color = Pal.Muted)
+        Text("ÉTIQUETTE", style = Type.Label, color = skyMuted())
         Spacer(Modifier.height(6.dp))
-        Text(medName, style = Type.Display, color = Pal.Ink, textAlign = TextAlign.Center)
+        Text(medName, style = Type.Display, color = skyInk(), textAlign = TextAlign.Center)
 
         Spacer(Modifier.height(26.dp))
 

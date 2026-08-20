@@ -174,18 +174,34 @@ class SkyTest {
     /** De gauche à droite : au matin l'astre est à gauche, au soir à droite. */
     @Test fun `le soleil traverse de gauche a droite`() {
         val (rise, set) = Sky.sunTimes(at(2026, 6, 21))!!
-        val matin = Sky.moment(rise + (set - rise) / 6).traverse
-        val midi = Sky.moment(rise + (set - rise) / 2).traverse
-        val soir = Sky.moment(set - (set - rise) / 6).traverse
+        val matin = Sky.moment(rise + (set - rise) / 6).sunT
+        val midi = Sky.moment(rise + (set - rise) / 2).sunT
+        val soir = Sky.moment(set - (set - rise) / 6).sunT
         assertTrue("$matin < $midi < $soir", matin < midi && midi < soir)
     }
 
-    /** Et il est plus haut à midi qu'aux deux bouts. */
-    @Test fun `le soleil est au plus haut au milieu du jour`() {
+    /**
+     * La course DÉBORDE de part et d'autre : sous l'horizon avant le lever, au-dessus
+     * après. C'est ce qui rend le passage du soleil à la lune continu, au lieu de figer
+     * l'astre au bord de l'écran pendant toute l'aube.
+     */
+    @Test fun `le soleil est sous l horizon avant le lever et apres le coucher`() {
         val (rise, set) = Sky.sunTimes(at(2026, 6, 21))!!
-        val midi = Sky.moment(rise + (set - rise) / 2).arc
-        val matin = Sky.moment(rise + (set - rise) / 8).arc
-        assertTrue("$midi > $matin", midi > matin)
+        assertTrue(Sky.moment(rise - 20 * 60_000L).sunT < 0f)
+        assertTrue(Sky.moment(set + 20 * 60_000L).sunT > 1f)
+        // Et pile au lever, il est exactement sur la ligne.
+        assertEquals(0f, Sky.moment(rise).sunT, 0.01f)
+    }
+
+    /** L'obscurité suit la hauteur du soleil, sans palier : midi clair, minuit noir. */
+    @Test fun `l obscurite suit la hauteur du soleil`() {
+        val (rise, set) = Sky.sunTimes(at(2026, 6, 21))!!
+        val midi = Sky.moment(rise + (set - rise) / 2).dark
+        val leverPile = Sky.moment(rise).dark
+        val nuit = Sky.moment(at(2026, 6, 21, 2)).dark
+        assertEquals(0f, midi, 0.01f)
+        assertTrue("au lever : $leverPile", leverPile in 0.4f..0.9f)
+        assertEquals(1f, nuit, 0.01f)
     }
 
     // ---- l'heure avancée du Québec -----------------------------------------
