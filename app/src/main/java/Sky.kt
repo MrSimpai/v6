@@ -68,6 +68,12 @@ object Sky {
         val falling: Falling,
         /** L'intensité de ce qui tombe, 0 à 1. */
         val fall: Float,
+        /** Le vent du jour, 0 à 1. Il penche la pluie, emporte les feuilles, berce les arbres. */
+        val wind: Float,
+        /** Orage sous la pluie, poudrerie sous la neige. Quelques jours par saison. */
+        val storm: Boolean,
+        /** La dernière semaine d'octobre. Des citrouilles allumées, et rien d'autre. */
+        val halloween: Boolean,
         val aurora: Float,
         val rainbow: Boolean,
         val shootingStar: Float
@@ -172,6 +178,42 @@ object Sky {
                 if (roll < 0.35f) Falling.RAIN to strength
                 else Falling.LEAVES to (0.4f + rng.nextFloat() * 0.6f)
         }
+    }
+
+    /**
+     * Le vent du jour.
+     *
+     * Une même averse ne fait pas du tout le même effet selon qu'elle tombe droit ou de
+     * travers. C'est le vent qui distingue deux journées de pluie l'une de l'autre, et
+     * c'est pour ça qu'il est tiré à part plutôt que déduit de l'intensité.
+     */
+    fun wind(now: Long): Float {
+        val rng = Random(dayIndex(now) * 401 + 29)
+        val base = rng.nextFloat()
+        // Une queue : la plupart des jours sont calmes, quelques-uns sont des tempêtes.
+        return (base * base * 1.25f).coerceIn(0f, 1f)
+    }
+
+    /** Orage ou poudrerie : rare, et seulement quand il tombe déjà quelque chose. */
+    fun storm(now: Long, falling: Falling, wind: Float): Boolean {
+        if (falling == Falling.NONE || falling == Falling.LEAVES) return false
+        val rng = Random(dayIndex(now) * 613 + 47)
+        // Le vent aide : une bourrasque qui tourne à la poudrerie est plus crédible qu'un
+        // blizzard par temps calme.
+        return rng.nextFloat() < 0.22f + wind * 0.3f
+    }
+
+    /**
+     * Les jours autour de l'Halloween, pour le décor du sol.
+     *
+     * Du 24 au 31 octobre. C'est la seule date fixe du calendrier que le ciel connaisse,
+     * et elle vaut le détour : une citrouille allumée sur le bord d'un chemin d'automne
+     * est exactement le genre de chose qu'on est content de retrouver une fois par an.
+     */
+    fun halloween(now: Long): Boolean {
+        val c = cal(now)
+        return c.get(Calendar.MONTH) == Calendar.OCTOBER &&
+            c.get(Calendar.DAY_OF_MONTH) >= 24
     }
 
     // ---- ce qui n'arrive pas souvent ---------------------------------------
@@ -294,6 +336,9 @@ object Sky {
             season = season,
             falling = fallKind,
             fall = fallAmount,
+            wind = forced.wind ?: wind(now),
+            storm = forced.storm ?: storm(now, fallKind, forced.wind ?: wind(now)),
+            halloween = halloween(now),
             aurora = forced.aurora ?: if (duskOrNight) aurora(now) else 0f,
             rainbow = forced.rainbow ?: (phase != Phase.NIGHT && rainbow(now, fallKind)),
             shootingStar = forced.shootingStar
@@ -306,6 +351,8 @@ object Sky {
         val season: Season? = null,
         val falling: Falling? = null,
         val fall: Float? = null,
+        val wind: Float? = null,
+        val storm: Boolean? = null,
         val moon: Float? = null,
         val aurora: Float? = null,
         val rainbow: Boolean? = null,

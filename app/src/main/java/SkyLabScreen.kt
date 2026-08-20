@@ -143,6 +143,35 @@ fun SkyLabScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             }
         }
 
+        // ---- le vent et les tempêtes ----
+        Spacer(Modifier.height(20.dp))
+        Section("VENT — ${((forced.wind ?: moment.wind) * 100).toInt()}%")
+        Slider(
+            value = forced.wind ?: moment.wind,
+            onValueChange = {
+                SkyLab.active.value = true
+                SkyLab.forced.value = forced.copy(wind = it)
+            },
+            valueRange = 0f..1f,
+            colors = SliderDefaults.colors(thumbColor = Pal.Iris, activeTrackColor = Pal.Iris)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip("Tempête", forced.storm == true, Modifier.weight(1f)) {
+                SkyLab.active.value = true
+                SkyLab.forced.value =
+                    forced.copy(storm = if (forced.storm == true) null else true)
+            }
+            Chip("Vent vrai", forced.wind == null, Modifier.weight(1f)) {
+                SkyLab.forced.value = forced.copy(wind = null, storm = null)
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "« Tempête » donne l'orage sous la pluie et la poudrerie sous la neige. Le " +
+                "vent penche la pluie, fait tourbillonner les feuilles et berce les arbres.",
+            style = Type.Label, color = Pal.Muted
+        )
+
         // ---- les rares ----
         Spacer(Modifier.height(20.dp))
         Section("LES RARES")

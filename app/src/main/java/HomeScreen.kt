@@ -258,13 +258,13 @@ fun HomeScreen(
         // perdu ; c'est le vide autour de lui qui est parti.
         Surface(
             color = Pal.Card, shape = Soft, tonalElevation = 0.dp,
-            modifier = Modifier.fillMaxWidth(0.9f).align(Alignment.CenterHorizontally)
+            modifier = Modifier.fillMaxWidth(0.76f).align(Alignment.CenterHorizontally)
         ) {
             Column(
                 Modifier.fillMaxWidth().padding(vertical = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Mascot(mood, Modifier.size(150.dp), worn = state.dressed)
+                Mascot(mood, Modifier.size(128.dp), worn = state.dressed)
                 Spacer(Modifier.height(4.dp))
                 // L'appairage a sa propre page maintenant : il n'a plus rien à dire ici.
                 AnimatedContent(targetState = mood, label = "prompt") { m ->
