@@ -251,70 +251,81 @@ fun HomeScreen(
 
         // ---- hero: the mascot and the prompt ----
         //
-        // Le carton est resserré autour du dragon : marges réduites, mascotte à 150 dp,
-        // et une bande de chaque côté. Il occupait presque la moitié de la hauteur de
-        // l'écran en aplat blanc, ce qui recouvrait justement la partie du ciel où il se
-        // passe quelque chose — l'horizon, les nuages, l'astre. Le dragon n'y a rien
-        // perdu ; c'est le vide autour de lui qui est parti.
-        Surface(
-            color = Pal.Card, shape = Soft, tonalElevation = 0.dp,
-            modifier = Modifier.fillMaxWidth(0.76f).align(Alignment.CenterHorizontally)
+        // Plus de carton du tout autour du dragon : il se tient à même le ciel.
+        //
+        // L'aplat blanc occupait la bande où il se passe quelque chose — l'horizon, les
+        // arbres, l'astre, ce qui tombe — et le dragon n'y gagnait rien qu'un cadre. Le
+        // texte qui l'accompagne prend donc l'encre du ciel ([skyMuted]), qui blanchit la
+        // nuit.
+        //
+        // Une seule exception, juste en dessous : le compteur et les sept points gardent
+        // une pastille translucide. Ce n'est pas de la timidité — deux des cinq états de
+        // la semaine sont des roses très pâles (`MISSED`, `FUTURE`), et posés directement
+        // sur un ciel de midi ils disparaîtraient purement et simplement.
+        Column(
+            Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Mascot(mood, Modifier.size(128.dp), worn = state.dressed)
-                Spacer(Modifier.height(4.dp))
-                // L'appairage a sa propre page maintenant : il n'a plus rien à dire ici.
-                AnimatedContent(targetState = mood, label = "prompt") { m ->
-                    Text(
-                        FloMessages.moodLine(m),
-                        style = Type.Body, color = Pal.Muted, textAlign = TextAlign.Center
-                    )
+            Mascot(mood, Modifier.size(118.dp), worn = state.dressed)
+            Spacer(Modifier.height(2.dp))
+            // L'appairage a sa propre page maintenant : il n'a plus rien à dire ici.
+            AnimatedContent(targetState = mood, label = "prompt") { m ->
+                Text(
+                    FloMessages.moodLine(m),
+                    style = Type.Body, color = skyMuted(), textAlign = TextAlign.Center
+                )
+            }
+
+            // Le compteur, à l'endroit où on le cherche.
+            //
+            // Il n'était affiché que sur la tuile de l'écran d'accueil du téléphone, dans
+            // la célébration de quatre secondes, et dans le bilan du dimanche. Autrement
+            // dit : nulle part, pour qui n'a pas posé la tuile. C'est le chiffre qui fait
+            // revenir ; il ne peut pas vivre uniquement dans un écran qui passe.
+            //
+            // Zéro ne s'affiche pas : « 0 journée complète » est un reproche, et les sept
+            // points disent déjà où on en est.
+            if (state.streak > 0 || state.week.size == 7) {
+                Spacer(Modifier.height(10.dp))
+                Surface(
+                    color = Pal.Card.copy(alpha = 0.62f),
+                    shape = Soft,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Column(
+                        Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (state.streak > 0) {
+                            Text("${state.streak}", style = Type.Display, color = Pal.Mint)
+                            Text(
+                                // Le même mot que la célébration plein écran, exactement :
+                                // deux formulations pour un seul chiffre feraient douter
+                                // que ce soit le même.
+                                if (state.streak == 1) "JOURNÉE COMPLÈTE"
+                                else "JOURNÉES COMPLÈTES",
+                                style = Type.Label, color = Pal.Mint
+                            )
+                        }
+                        if (state.week.size == 7) {
+                            if (state.streak > 0) Spacer(Modifier.height(10.dp))
+                            WeekDots(state.week)
+                        }
+                    }
                 }
-                // Le compteur, à l'endroit où on le cherche.
-                //
-                // Il n'était affiché que sur la tuile de l'écran d'accueil du téléphone,
-                // dans la célébration de quatre secondes, et dans le bilan du dimanche.
-                // Autrement dit : nulle part, pour qui n'a pas posé la tuile. On note sa
-                // première dose, la série vaut un, et l'app n'en dit rien — donc la seule
-                // chose qu'elle demande de faire tous les jours n'a aucune trace visible
-                // le reste du temps. C'est le chiffre qui fait revenir ; il ne peut pas
-                // vivre uniquement dans un écran qui passe.
-                //
-                // Zéro ne s'affiche pas : « 0 journée complète » est un reproche, et les
-                // sept points disent déjà où on en est.
-                if (state.streak > 0) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "${state.streak}",
-                        style = Type.Display, color = Pal.Mint
-                    )
-                    Text(
-                        // Le même mot que la célébration plein écran, exactement : deux
-                        // formulations pour un seul chiffre feraient douter que ce soit
-                        // le même.
-                        if (state.streak == 1) "JOURNÉE COMPLÈTE" else "JOURNÉES COMPLÈTES",
-                        style = Type.Label, color = Pal.Mint
-                    )
-                }
-                if (state.week.size == 7) {
-                    Spacer(Modifier.height(10.dp))
-                    WeekDots(state.week)
-                }
-                // Ce que le NFC vient de répondre, quand ce n'était pas une dose : une
-                // étiquette inconnue ne faisait RIEN du tout, silencieusement, ce qui se
-                // lit exactement comme un NFC en panne.
-                state.nfcNote?.let { note ->
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        note,
-                        style = Type.Label, color = Pal.Apricot,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
+            }
+
+            // Ce que le NFC vient de répondre, quand ce n'était pas une dose : une
+            // étiquette inconnue ne faisait RIEN du tout, silencieusement, ce qui se lit
+            // exactement comme un NFC en panne.
+            state.nfcNote?.let { note ->
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    note,
+                    style = Type.Label, color = Pal.Apricot,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
             }
         }
 

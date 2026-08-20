@@ -91,6 +91,32 @@ class SkyTest {
         assertTrue("$a vs $b", kotlin.math.abs(a - b) < 0.02f)
     }
 
+    /**
+     * La part éclairée, telle que le dessin la calcule : 0 à la nouvelle lune, 1 à la
+     * pleine.
+     *
+     * C'est cette valeur qui pilotait la morsure du croissant, et elle était appliquée à
+     * l'envers : à la nouvelle lune le disque restait entier, donc le soir où il ne devait
+     * y avoir aucune lune, il y en avait une pleine. Le test fixe les deux extrêmes et le
+     * quartier, qui sont exactement les trois points où l'inversion se voit.
+     */
+    private fun illum(p: Float) = 1f - kotlin.math.abs(p - 0.5f) * 2f
+
+    @Test fun `la part eclairee va de zero a un`() {
+        assertEquals(0f, illum(0f), 0.001f)          // nouvelle : rien
+        assertEquals(0f, illum(1f), 0.001f)          // et l'autre bout du cycle aussi
+        assertEquals(1f, illum(0.5f), 0.001f)        // pleine : tout
+        assertEquals(0.5f, illum(0.25f), 0.001f)     // premier quartier : la moitié
+        assertEquals(0.5f, illum(0.75f), 0.001f)     // dernier quartier : l'autre moitié
+    }
+
+    /** Une nouvelle lune de calendrier doit bien rendre une part éclairée quasi nulle. */
+    @Test fun `la nouvelle lune n eclaire rien`() {
+        // Nouvelle lune le 18 janvier 2026.
+        val p = Sky.moonPhase(at(2026, 1, 18, 12))
+        assertTrue("phase $p", illum(p) < 0.12f)
+    }
+
     @Test fun `la phase reste toujours entre zero et un`() {
         listOf(at(2020, 1, 1), at(2026, 8, 6), at(2030, 12, 31)).forEach {
             val p = Sky.moonPhase(it)

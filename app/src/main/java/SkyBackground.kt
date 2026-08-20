@@ -229,6 +229,10 @@ private fun DrawScope.drawSky(m: Sky.Moment, t: Float) {
         sun(m, sky)
         clouds(m, sky)
         if (m.rainbow) rainbow(sky)
+        // Pas sous condition de nuit : l'atelier peut l'imposer, et un bouton qui ne fait
+        // rien de visible est un bouton cassé. Naturellement, `Sky.moment` ne la déclenche
+        // déjà que la nuit.
+        if (m.shootingStar > 0f) shootingStar(m, sky, t)
     }
 
     ground(m, horizon, t)
@@ -272,10 +276,21 @@ private fun DrawScope.moon(m: Sky.Moment, sky: Rect) {
     val p = arcPos(sky, m.moonT)
     val r = sky.height * 0.085f
 
-    drawCircle(MoonWhite.copy(alpha = 0.16f), r * 2.6f, p)
-
     val illum = 1f - abs(m.moon - 0.5f) * 2f      // 0 nouvelle .. 1 pleine
-    val shift = r * 2f * (1f - illum)
+
+    // Une nouvelle lune ne se voit pas. Pas de disque, pas de halo, rien — c'est la
+    // définition même d'une nouvelle lune.
+    if (illum < 0.04f) return
+
+    drawCircle(MoonWhite.copy(alpha = 0.16f * illum), r * 2.6f, p)
+
+    // Le décalage de la morsure suit la part ÉCLAIRÉE, et non son complément.
+    //
+    // C'était inversé, et l'erreur ne se voyait qu'aux extrêmes : à la nouvelle lune,
+    // `1 - illum` valait 1, la morsure partait à deux rayons de là — donc elle ne mordait
+    // rien du tout et le disque entier restait, une pleine lune le soir précisément où il
+    // ne devait rien y avoir. Au premier quartier, la moitié enlevée était la mauvaise.
+    val shift = r * 2f * illum
     val side = if (m.moon < 0.5f) 1f else -1f
 
     val disc = Path().apply { addOval(Rect(p.x - r, p.y - r, p.x + r, p.y + r)) }
@@ -419,6 +434,44 @@ private fun DrawScope.clouds(m: Sky.Moment, sky: Rect) {
             )
         }
     }
+}
+
+/**
+ * L'étoile filante, qui file vraiment.
+ *
+ * Elle avait disparu du dessin en même temps que le reste du bas du fichier, ce qui
+ * explique qu'aucun bouton ne la montrait. Et même avant, elle ne bougeait pas : une
+ * traînée figée pendant vingt minutes n'est pas une étoile filante, c'est une rayure.
+ *
+ * Elle traverse maintenant en une seconde et demie, puis laisse cinq secondes de ciel
+ * vide avant la suivante. C'est le silence entre deux passages qui fait qu'on la guette.
+ */
+private fun DrawScope.shootingStar(m: Sky.Moment, sky: Rect, t: Float) {
+    val rng = Random(m.day * 7 + 11)
+
+    // Trois passages par boucle de vingt secondes, et la traînée n'occupe que le premier
+    // quart de chacun.
+    val cycle = (t * 3f + rng.nextFloat()) % 1f
+    if (cycle > 0.26f) return
+    val p = cycle / 0.26f
+
+    val fromX = sky.width * (rng.nextFloat() * 0.5f - 0.05f)
+    val fromY = sky.height * (0.05f + rng.nextFloat() * 0.22f)
+    val travel = sky.width * 0.55f
+
+    val head = Offset(fromX + travel * p, fromY + travel * 0.42f * p)
+    val tail = Offset(head.x - travel * 0.26f, head.y - travel * 0.11f)
+
+    // Elle s'allume vite et s'éteint doucement, comme une vraie.
+    val a = (if (p < 0.2f) p / 0.2f else 1f - (p - 0.2f) / 0.8f).coerceIn(0f, 1f) *
+        m.shootingStar
+
+    drawLine(
+        StarWhite.copy(alpha = 0.75f * a), head, tail,
+        strokeWidth = 3f, cap = StrokeCap.Round
+    )
+    drawCircle(StarWhite.copy(alpha = 0.35f * a), 7f, head)
+    drawCircle(StarWhite.copy(alpha = a), 2.6f, head)
 }
 
 private fun DrawScope.rainbow(sky: Rect) {
