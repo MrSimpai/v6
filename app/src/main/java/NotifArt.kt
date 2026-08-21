@@ -3,6 +3,7 @@ package com.example.medtap.reminder
 import android.graphics.*
 import com.example.medtap.ui.Dragon
 import com.example.medtap.ui.Mood
+import com.example.medtap.ui.Sky
 import java.util.Calendar
 import kotlin.random.Random
 
@@ -246,9 +247,113 @@ object NotifArt {
      * l'écran. Un rayon calculé ici en proportion du petit côté donnerait 15 dp sur une
      * 2x2 et 46 dp sur une 4x4 : la grande tuile finirait en pastille.
      */
-    fun widgetBg(w: Int, h: Int, radiusPx: Float, vibe: Vibe, night: Boolean): Bitmap {
+    /**
+     * La tuile : le MÊME ciel que l'app, en plus petit.
+     *
+     * Elle avait son propre décor, tiré d'une échelle de couleurs différente. Deux ciels
+     * pour une seule maison : on pouvait avoir un couchant sur l'écran d'accueil du
+     * téléphone pendant que l'app était déjà à la nuit. Les couleurs viennent maintenant
+     * de [Sky.Palette], comme celles de l'app.
+     *
+     * Le décor est simplifié à dessein — pas de visiteurs, pas de nuages détaillés. À
+     * cette taille, tout ce qui est plus fin qu'un astre devient de la salissure, et la
+     * tuile doit rester lisible d'un coup d'œil depuis l'autre bout de la pièce.
+     */
+    fun skyTile(w: Int, h: Int, radiusPx: Float, m: Sky.Moment): Bitmap {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        scene(Canvas(bmp), w.toFloat(), h.toFloat(), vibe, night, radiusPx)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { isDither = true }
+        val wf = w.toFloat()
+        val hf = h.toFloat()
+        val horizon = hf * 0.62f
+
+        // Les coins arrondis sont découpés dans le bitmap : un seul calque, aucun risque
+        // de liseré blanc qui dépasse sur le fond d'écran.
+        val box = RectF(0f, 0f, wf, hf)
+        c.save()
+        c.clipPath(Path().apply { addRoundRect(box, radiusPx, radiusPx, Path.Direction.CW) })
+
+        p.shader = LinearGradient(
+            0f, 0f, 0f, horizon,
+            Sky.Palette.high(m), Sky.Palette.low(m), Shader.TileMode.CLAMP
+        )
+        c.drawRect(0f, 0f, wf, horizon, p)
+        p.shader = null
+
+        // Les étoiles : petites, blanches, franches. Un point pâle ne se voit pas à cette
+        // échelle, alors qu'un point net à pleine opacité tient.
+        if (m.dark > 0.45f) {
+            val rng = Random(31)
+            val k = ((m.dark - 0.45f) / 0.4f).coerceIn(0f, 1f)
+            repeat(26) {
+                val x = rng.nextFloat() * wf
+                val y = rng.nextFloat() * horizon * 0.86f
+                p.color = withAlpha(0xFFFFFFFF.toInt(), (k * (230 - y / horizon * 120)).toInt())
+                c.drawCircle(x, y, 0.9f + rng.nextFloat() * 1.5f, p)
+            }
+        }
+
+        // L'astre, sur son arc, de gauche à droite.
+        val night = m.dark > 0.55f
+        val t = if (night) m.moonT else m.sunT
+        if (t in -0.12f..1.12f) {
+            val ax = wf * (0.12f + 0.76f * t)
+            val ay = horizon - kotlin.math.sin(t * Math.PI).toFloat() * horizon * 0.72f
+            val r = hf * 0.075f
+            if (night) {
+                p.color = withAlpha(0xFFF7F5EE.toInt(), 40)
+                c.drawCircle(ax, ay, r * 2.2f, p)
+                val illum = 1f - kotlin.math.abs(m.moon - 0.5f) * 2f
+                if (illum >= 0.04f) {
+                    val disc = Path().apply { addCircle(ax, ay, r, Path.Direction.CW) }
+                    val side = if (m.moon < 0.5f) 1f else -1f
+                    val bite = Path().apply {
+                        addCircle(ax + side * r * 2f * illum, ay, r * 1.02f, Path.Direction.CW)
+                    }
+                    if (illum <= 0.97f) disc.op(bite, Path.Op.DIFFERENCE)
+                    p.color = 0xFFF7F5EE.toInt()
+                    c.drawPath(disc, p)
+                }
+            } else {
+                p.color = withAlpha(0xFFFFC65A.toInt(), 60)
+                c.drawCircle(ax, ay, r * 2.4f, p)
+                p.color = 0xFFFFD98A.toInt()
+                c.drawCircle(ax, ay, r, p)
+            }
+        }
+
+        // Le sol de la saison, avec une rangée de sapins en silhouette.
+        val ground = Sky.Palette.mix(Sky.Palette.ground(m.season), 0xFF141B33.toInt(), m.dark * 0.7f)
+        val tree = Sky.Palette.mix(Sky.Palette.tree(m.season), 0xFF0C1226.toInt(), m.dark * 0.78f)
+        p.color = tree
+        val rng = Random(m.day * 131 + 7)
+        var x = -wf * 0.05f
+        while (x < wf * 1.05f) {
+            val th = hf * (0.07f + rng.nextFloat() * 0.09f)
+            val tw = th * 0.62f
+            Path().apply {
+                moveTo(x, horizon + 1f)
+                lineTo(x + tw / 2f, horizon - th)
+                lineTo(x + tw, horizon + 1f)
+                close()
+            }.also { c.drawPath(it, p) }
+            x += tw * (1.1f + rng.nextFloat() * 1.2f)
+        }
+        p.color = ground
+        c.drawRect(0f, horizon, wf, hf, p)
+
+        // Le voile sous le texte : c'est LUI qui garde la phrase lisible quand le ciel
+        // passe au bleu de midi. Sans lui, il faudrait choisir entre un beau ciel et un
+        // texte qu'on peut lire.
+        p.shader = LinearGradient(
+            0f, hf * 0.10f, 0f, hf * 0.82f,
+            intArrayOf(0x00000000, 0x59000000, 0x73000000),
+            floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP
+        )
+        c.drawRect(0f, hf * 0.10f, wf, hf * 0.82f, p)
+        p.shader = null
+
+        c.restore()
         return bmp
     }
 
@@ -282,13 +387,16 @@ object NotifArt {
         // Nettement plus opaque qu'avant : sur le ciel de midi, une gélule à 35 % de noir
         // laissait le chiffre blanc se dissoudre dans le fond. C'est la pastille qui doit
         // porter le contraste, pas le décor — lui change huit fois par jour.
+        // La gélule : un noir profond très légèrement teinté prune, et un liseré rosé.
+        // Le noir pur à côté d'un dragon framboise fait tache ; deux points de rouge dans
+        // l'ombre suffisent à ce que la pastille appartienne au même dessin.
         val box = RectF(0f, 0f, w.toFloat(), hh)
-        p.color = 0xA6000000.toInt()
+        p.color = 0xB3170A12.toInt()
         c.drawRoundRect(box, hh / 2f, hh / 2f, p)
         p.style = Paint.Style.STROKE
-        p.strokeWidth = hh * 0.06f
-        p.color = 0x73FFFFFF
-        c.drawRoundRect(box.apply { inset(hh * 0.03f, hh * 0.03f) }, hh / 2f, hh / 2f, p)
+        p.strokeWidth = hh * 0.055f
+        p.color = if (streak > 0) 0x8CFF9EC4.toInt() else 0x59FFFFFF
+        c.drawRoundRect(box.apply { inset(hh * 0.028f, hh * 0.028f) }, hh / 2f, hh / 2f, p)
         p.style = Paint.Style.FILL
 
         flame(c, p, padX, hh * 0.20f, flameW, hh * 0.62f, streak > 0)
@@ -301,25 +409,61 @@ object NotifArt {
         return bmp
     }
 
+    /**
+     * La flamme, en framboise plutôt qu'en orange.
+     *
+     * L'orange de Duolingo est leur couleur, pas la nôtre. Un dégradé rose vers rouge
+     * reprend exactement celui du dragon, et le cœur clair au milieu vire au rose pâle
+     * au lieu du jaune — la pastille appartient enfin à cette app-ci.
+     *
+     * Éteinte, elle est grise et non pas rose délavé : le zéro doit se lire comme éteint,
+     * pas comme une flamme un peu fatiguée.
+     */
     private fun flame(c: Canvas, p: Paint, x: Float, y: Float, w: Float, h: Float, lit: Boolean) {
         val cx = x + w / 2f
-        p.color = if (lit) 0xFFFF9600.toInt() else 0xFF8E93A0.toInt()
-        Path().apply {
+        val body = Path().apply {
             moveTo(cx, y)
             cubicTo(cx + w * 0.56f, y + h * 0.32f, cx + w * 0.52f, y + h * 0.64f, cx + w * 0.30f, y + h * 0.86f)
             cubicTo(cx + w * 0.10f, y + h * 1.02f, cx - w * 0.10f, y + h * 1.02f, cx - w * 0.30f, y + h * 0.86f)
             cubicTo(cx - w * 0.52f, y + h * 0.66f, cx - w * 0.44f, y + h * 0.30f, cx - w * 0.08f, y + h * 0.08f)
             cubicTo(cx - w * 0.16f, y + h * 0.38f, cx - w * 0.02f, y + h * 0.44f, cx, y)
             close()
-        }.also { c.drawPath(it, p) }
+        }
 
-        p.color = if (lit) 0xFFFFD34E.toInt() else 0xFFB9BEC8.toInt()
+        if (lit) {
+            p.shader = LinearGradient(
+                cx, y, cx, y + h,
+                intArrayOf(0xFFFF9EC4.toInt(), 0xFFFF5A8A.toInt(), 0xFFD8264F.toInt()),
+                floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP
+            )
+        } else {
+            p.color = 0xFF8E93A0.toInt()
+        }
+        c.drawPath(body, p)
+        p.shader = null
+
+        // Le cœur clair, décalé vers le bas : c'est ce qui donne la profondeur.
+        p.color = if (lit) 0xFFFFD9E8.toInt() else 0xFFB9BEC8.toInt()
         Path().apply {
             moveTo(cx, y + h * 0.40f)
             cubicTo(cx + w * 0.30f, y + h * 0.60f, cx + w * 0.26f, y + h * 0.82f, cx, y + h * 0.94f)
             cubicTo(cx - w * 0.26f, y + h * 0.82f, cx - w * 0.30f, y + h * 0.60f, cx, y + h * 0.40f)
             close()
         }.also { c.drawPath(it, p) }
+
+        // Une étincelle en cœur au-dessus, quand la série tient.
+        if (lit) {
+            p.color = withAlpha(0xFFFFB3D0.toInt(), 210)
+            val hr = w * 0.16f
+            val hx = cx + w * 0.42f
+            val hy = y + h * 0.12f
+            Path().apply {
+                moveTo(hx, hy + hr * 0.85f)
+                cubicTo(hx - hr * 1.5f, hy - hr * 0.2f, hx - hr * 0.5f, hy - hr * 1.2f, hx, hy - hr * 0.35f)
+                cubicTo(hx + hr * 0.5f, hy - hr * 1.2f, hx + hr * 1.5f, hy - hr * 0.2f, hx, hy + hr * 0.85f)
+                close()
+            }.also { c.drawPath(it, p) }
+        }
     }
 
     // ---- la semaine -------------------------------------------------------

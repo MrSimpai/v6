@@ -346,6 +346,72 @@ object Sky {
         )
     }
 
+    /**
+     * Les couleurs du ciel, en ARGB brut.
+     *
+     * Ici et pas dans le dessin, parce que DEUX surfaces les utilisent : l'app, qui peint
+     * en `Compose`, et la tuile de l'écran d'accueil, qui peint en `android.graphics`.
+     * Deux palettes séparées, c'est la certitude qu'un jour la tuile affichera un couchant
+     * pendant que l'app est déjà à la nuit.
+     */
+    object Palette {
+        private const val NIGHT_HIGH = 0xFF0B1030.toInt()
+        private const val NIGHT_LOW = 0xFF2A3A6E.toInt()
+        private const val DAY_HIGH = 0xFF3E9BE0.toInt()
+        private const val DAY_LOW = 0xFFAFE0F5.toInt()
+        private const val FIRE_HIGH = 0xFF7B2D6B.toInt()
+        private const val FIRE_LOW = 0xFFFF9A3C.toInt()
+
+        fun tint(s: Season): Pair<Int, Float> = when (s) {
+            Season.WINTER -> 0xFFCFC3FF.toInt() to 0.30f
+            Season.SPRING -> 0xFFFFC7E8.toInt() to 0.24f
+            Season.SUMMER -> 0xFFFFE29A.toInt() to 0.22f
+            Season.AUTUMN -> 0xFFFFB07A.toInt() to 0.28f
+        }
+
+        fun ground(s: Season): Int = when (s) {
+            Season.WINTER -> 0xFFF2EEFF.toInt()
+            Season.SPRING -> 0xFF9BE08A.toInt()
+            Season.SUMMER -> 0xFF5FD08A.toInt()
+            Season.AUTUMN -> 0xFFE8925A.toInt()
+        }
+
+        fun tree(s: Season): Int = when (s) {
+            Season.WINTER -> 0xFF2E6B63.toInt()
+            Season.SPRING -> 0xFF3FA55C.toInt()
+            Season.SUMMER -> 0xFF2E8B57.toInt()
+            Season.AUTUMN -> 0xFFC2512A.toInt()
+        }
+
+        /** L'embrasement du bas du ciel : maximal quand le soleil rase l'horizon. */
+        fun fire(m: Moment): Float =
+            (1f - kotlin.math.abs(m.dark - 0.62f) / 0.34f).coerceIn(0f, 1f)
+
+        fun high(m: Moment): Int = seasoned(m, mix(NIGHT_HIGH, DAY_HIGH, 1f - m.dark)
+            .let { mix(it, FIRE_HIGH, fire(m) * 0.8f) }, 0.55f)
+
+        fun low(m: Moment): Int = seasoned(m, mix(NIGHT_LOW, DAY_LOW, 1f - m.dark)
+            .let { mix(it, FIRE_LOW, fire(m)) }, 1f)
+
+        private fun seasoned(m: Moment, base: Int, strength: Float): Int {
+            val (t, amount) = tint(m.season)
+            return mix(base, t, amount * (1f - m.dark * 0.6f) * strength)
+        }
+
+        /** L'encre lisible sur ce ciel-là : blanche la nuit, prune le jour. */
+        fun ink(m: Moment): Int = mix(0xFF3B1327.toInt(), 0xFFF6F3FA.toInt(), m.dark)
+
+        fun mix(a: Int, b: Int, k: Float): Int {
+            val f = k.coerceIn(0f, 1f)
+            fun ch(shift: Int): Int {
+                val x = (a shr shift) and 0xFF
+                val y = (b shr shift) and 0xFF
+                return (x + (y - x) * f).toInt().coerceIn(0, 255)
+            }
+            return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+        }
+    }
+
     /** Ce que l'atelier impose. Tout ce qui reste `null` continue d'être calculé. */
     data class Forced(
         val season: Season? = null,

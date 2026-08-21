@@ -19,6 +19,7 @@ import com.example.medtap.data.outstandingToday
 import com.example.medtap.data.weekStatus
 import com.example.medtap.ui.Dragon
 import com.example.medtap.ui.Mood
+import com.example.medtap.ui.Sky
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -179,10 +180,11 @@ class DragonWidget : AppWidgetProvider() {
                     else -> FloMessages.widgetLine(mood)
                 }
 
-                // Le décor suit deux choses à la fois : le palier de retard, et la pendule.
-                // Sans la pendule, la tuile du repos affichait une lune à quinze heures.
-                val night = NotifArt.isNight(now)
-                val vibe = NotifArt.vibeFor(mood, lateMin, now)
+                // Le décor de la tuile est celui de l'app, pas un décor à lui : même
+                // heure, même saison, même lune, même ciel. Deux systèmes de couleurs
+                // pour une seule maison, c'était la garantie d'un couchant sur l'écran
+                // d'accueil pendant que l'app était déjà à la nuit.
+                val sky = Sky.moment(now)
 
                 // Tout ce qui ne dépend pas de la TAILLE est dessiné une seule fois et
                 // partagé par toutes les tuiles posées. Seul le fond change d'une à
@@ -209,7 +211,7 @@ class DragonWidget : AppWidgetProvider() {
                         setImageViewBitmap(R.id.widget_dragon, dragonBmp)
                         setImageViewBitmap(
                             R.id.widget_bg,
-                            NotifArt.widgetBg(tile.wPx, tile.hPx, tile.radiusPx, vibe, night)
+                            NotifArt.skyTile(tile.wPx, tile.hPx, tile.radiusPx, sky)
                         )
                         setImageViewBitmap(R.id.widget_week, weekBmp)
                         // La pastille reste posée même à zéro, éteinte : un emplacement qui

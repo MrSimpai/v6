@@ -262,11 +262,19 @@ fun HomeScreen(
         // une pastille translucide. Ce n'est pas de la timidité — deux des cinq états de
         // la semaine sont des roses très pâles (`MISSED`, `FUTURE`), et posés directement
         // sur un ciel de midi ils disparaîtraient purement et simplement.
+        Surface(
+            // Un carton, mais translucide : le ciel passe au travers sans que le texte
+            // ait à se battre avec lui. Le dragon reste le point de mire de l'app — il a
+            // donc retrouvé sa taille, et c'est le cadre qui s'est fait discret.
+            color = Pal.Card.copy(alpha = 0.82f),
+            shape = Soft,
+            modifier = Modifier.fillMaxWidth(0.88f).align(Alignment.CenterHorizontally)
+        ) {
         Column(
-            Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth().padding(vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Mascot(mood, Modifier.size(118.dp), worn = state.dressed)
+            Mascot(mood, Modifier.size(184.dp), worn = state.dressed)
             Spacer(Modifier.height(2.dp))
             // L'appairage a sa propre page maintenant : il n'a plus rien à dire ici.
             AnimatedContent(targetState = mood, label = "prompt") { m ->
@@ -285,34 +293,19 @@ fun HomeScreen(
             //
             // Zéro ne s'affiche pas : « 0 journée complète » est un reproche, et les sept
             // points disent déjà où on en est.
-            if (state.streak > 0 || state.week.size == 7) {
+            if (state.streak > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text("${state.streak}", style = Type.Display, color = Pal.Mint)
+                Text(
+                    // Le même mot que la célébration plein écran, exactement : deux
+                    // formulations pour un seul chiffre feraient douter que ce soit le même.
+                    if (state.streak == 1) "JOURNÉE COMPLÈTE" else "JOURNÉES COMPLÈTES",
+                    style = Type.Label, color = Pal.Mint
+                )
+            }
+            if (state.week.size == 7) {
                 Spacer(Modifier.height(10.dp))
-                Surface(
-                    color = Pal.Card.copy(alpha = 0.62f),
-                    shape = Soft,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                ) {
-                    Column(
-                        Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        if (state.streak > 0) {
-                            Text("${state.streak}", style = Type.Display, color = Pal.Mint)
-                            Text(
-                                // Le même mot que la célébration plein écran, exactement :
-                                // deux formulations pour un seul chiffre feraient douter
-                                // que ce soit le même.
-                                if (state.streak == 1) "JOURNÉE COMPLÈTE"
-                                else "JOURNÉES COMPLÈTES",
-                                style = Type.Label, color = Pal.Mint
-                            )
-                        }
-                        if (state.week.size == 7) {
-                            if (state.streak > 0) Spacer(Modifier.height(10.dp))
-                            WeekDots(state.week)
-                        }
-                    }
-                }
+                WeekDots(state.week)
             }
 
             // Ce que le NFC vient de répondre, quand ce n'était pas une dose : une
@@ -328,9 +321,10 @@ fun HomeScreen(
                 )
             }
         }
+        }
 
         Spacer(Modifier.height(24.dp))
-        Text("AUJOURD'HUI", style = Type.Label, color = Pal.Muted)
+        Text("AUJOURD'HUI", style = Type.Label, color = skyMuted())
         Spacer(Modifier.height(10.dp))
 
         state.meds.forEach { med ->

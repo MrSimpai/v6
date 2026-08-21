@@ -35,6 +35,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -165,19 +166,34 @@ private val LeafInks = listOf(
     Color(0xFFE06A1E), Color(0xFFC2371A), Color(0xFFE8A62E), Color(0xFF9C3D1F)
 )
 
-/** Le sol, qui dit la saison d'un seul coup d'œil. */
+/**
+ * Le sol de la saison — en pop, pas en documentaire.
+ *
+ * Les verts forestiers et le brun de terre étaient justes et tristes. Ici le printemps est
+ * un vert tendre, l'été un vert vif, l'automne un corail plutôt qu'une boue, et l'hiver
+ * une neige bleu-lilas au lieu d'un blanc d'hôpital. La saison doit se lire comme une
+ * humeur, pas comme un relevé.
+ */
 private fun groundColor(s: Sky.Season) = when (s) {
-    Sky.Season.WINTER -> Color(0xFFEDF3FA)
-    Sky.Season.SPRING -> Color(0xFF6FBF63)
-    Sky.Season.SUMMER -> Color(0xFF3E9B4F)
-    Sky.Season.AUTUMN -> Color(0xFFB5651F)
+    Sky.Season.WINTER -> Color(0xFFF2EEFF)
+    Sky.Season.SPRING -> Color(0xFF9BE08A)
+    Sky.Season.SUMMER -> Color(0xFF5FD08A)
+    Sky.Season.AUTUMN -> Color(0xFFE8925A)
 }
 
 private fun treeColor(s: Sky.Season) = when (s) {
-    Sky.Season.WINTER -> Color(0xFF1F5140)
-    Sky.Season.SPRING -> Color(0xFF2F7A46)
-    Sky.Season.SUMMER -> Color(0xFF215F32)
-    Sky.Season.AUTUMN -> Color(0xFF8A3A12)
+    Sky.Season.WINTER -> Color(0xFF2E6B63)
+    Sky.Season.SPRING -> Color(0xFF3FA55C)
+    Sky.Season.SUMMER -> Color(0xFF2E8B57)
+    Sky.Season.AUTUMN -> Color(0xFFC2512A)
+}
+
+/** Le voile de saison posé sur le ciel : c'est lui qui donne l'ambiance. */
+private fun seasonTint(s: Sky.Season): Pair<Color, Float> = when (s) {
+    Sky.Season.WINTER -> Color(0xFFCFC3FF) to 0.30f      // lilas glacé
+    Sky.Season.SPRING -> Color(0xFFFFC7E8) to 0.24f      // rose de floraison
+    Sky.Season.SUMMER -> Color(0xFFFFE29A) to 0.22f      // or
+    Sky.Season.AUTUMN -> Color(0xFFFFB07A) to 0.28f      // corail
 }
 
 /**
@@ -195,8 +211,17 @@ private fun skyColors(m: Sky.Moment): Pair<Color, Color> {
     // L'embrasement est maximal juste au moment où le soleil touche l'horizon, et retombe
     // vite de part et d'autre.
     val fire = (1f - abs(m.dark - 0.62f) / 0.34f).coerceIn(0f, 1f)
-    if (fire <= 0f) return high to low
-    return lerp(high, FireHigh, fire * 0.8f) to lerp(low, FireLow, fire)
+    var h = high
+    var l = low
+    if (fire > 0f) {
+        h = lerp(h, FireHigh, fire * 0.8f)
+        l = lerp(l, FireLow, fire)
+    }
+    // Le voile de saison, appliqué en dernier et à moitié la nuit : une teinte de saison
+    // sur du bleu nuit ne ferait que le délaver en gris.
+    val (tint, amount) = seasonTint(m.season)
+    val k = amount * (1f - m.dark * 0.6f)
+    return lerp(h, tint, k * 0.55f) to lerp(l, tint, k)
 }
 
 // ---- le dessin -------------------------------------------------------------
@@ -236,6 +261,9 @@ private fun DrawScope.drawSky(m: Sky.Moment, t: Float) {
     }
 
     ground(m, horizon, t)
+    // Les visiteurs passent DEVANT les arbres et derrière ce qui tombe : ils appartiennent
+    // au paysage, pas au ciel.
+    visitors(m, horizon, t)
 
     when (m.falling) {
         Sky.Falling.RAIN -> rain(m, horizon, t)
@@ -832,5 +860,477 @@ private fun DrawScope.leaves(m: Sky.Moment, horizon: Float, t: Float) {
                 Offset(x, y - s), Offset(x, y + s), strokeWidth = 1f
             )
         }
+    }
+}
+
+// ---- les visiteurs ---------------------------------------------------------
+//
+// Quinze petites choses qui passent, une ou deux par jour, tirées au sort sur la date et
+// filtrées par la saison et l'heure. C'est ce qui fait qu'un mardi de mars n'a pas la même
+// tête qu'un autre mardi de mars : le ciel, lui, ne change presque pas d'un jour à l'autre,
+// alors qu'un chevreuil qui traverse, ça se remarque.
+//
+// Elles vivent sur la ligne d'horizon ou juste au-dessus, jamais dans la zone du contenu.
+
+private enum class Visitor {
+    CABIN, DEER, BUTTERFLY, FROG, GEESE, RABBIT, FIREFLIES, SNOWMAN,
+    BLOSSOMS, FOX, KITE, BALLOON, BATS, SQUIRREL, OWL
+}
+
+/**
+ * Qui passe aujourd'hui.
+ *
+ * Le chalet et le bonhomme de neige sont des DÉCORS : ils restent toute la saison, parce
+ * qu'une cabane qui disparaît un jour sur deux ne serait pas une cabane. Le reste sont des
+ * passages, un ou deux par jour.
+ */
+private fun visitorsFor(m: Sky.Moment): List<Visitor> {
+    val out = mutableListOf<Visitor>()
+    val night = m.dark > 0.6f
+
+    if (m.season == Sky.Season.WINTER) {
+        out += Visitor.CABIN
+        if (Random(m.day * 53 + 1).nextFloat() < 0.55f) out += Visitor.SNOWMAN
+    }
+    if (m.season == Sky.Season.SPRING) out += Visitor.BLOSSOMS
+
+    val pool = buildList {
+        when (m.season) {
+            Sky.Season.WINTER -> { add(Visitor.DEER); add(Visitor.FOX); add(Visitor.OWL) }
+            Sky.Season.SPRING -> {
+                add(Visitor.BUTTERFLY); add(Visitor.FROG); add(Visitor.RABBIT)
+                if (m.wind > 0.35f) add(Visitor.KITE)
+            }
+            Sky.Season.SUMMER -> {
+                add(Visitor.BUTTERFLY); add(Visitor.BALLOON); add(Visitor.FROG)
+                if (night) add(Visitor.FIREFLIES)
+            }
+            Sky.Season.AUTUMN -> {
+                add(Visitor.GEESE); add(Visitor.SQUIRREL); add(Visitor.DEER)
+                if (m.halloween && night) add(Visitor.BATS)
+            }
+        }
+        if (night) { add(Visitor.OWL); remove(Visitor.BUTTERFLY) }
+    }
+    if (pool.isNotEmpty()) {
+        val rng = Random(m.day * 787 + 5)
+        out += pool[rng.nextInt(pool.size)]
+        // Une seconde visite un jour sur trois : deux tous les jours, ce serait un zoo.
+        if (rng.nextFloat() < 0.34f) out += pool[rng.nextInt(pool.size)]
+    }
+    return out.distinct()
+}
+
+private fun DrawScope.visitors(m: Sky.Moment, horizon: Float, t: Float) {
+    val night = m.dark
+    visitorsFor(m).forEachIndexed { i, v ->
+        val seed = Random(m.day * 97 + i * 31)
+        when (v) {
+            Visitor.CABIN -> cabin(m, horizon, t, night)
+            Visitor.SNOWMAN -> snowman(horizon, seed, night)
+            Visitor.BLOSSOMS -> blossoms(horizon, m, t)
+            Visitor.DEER -> deer(horizon, t, seed, night)
+            Visitor.FOX -> fox(horizon, t, seed, night)
+            Visitor.RABBIT -> rabbit(horizon, t, seed, night)
+            Visitor.SQUIRREL -> squirrel(horizon, t, seed, night)
+            Visitor.FROG -> frog(horizon, t, seed, night)
+            Visitor.BUTTERFLY -> butterfly(horizon, t, seed)
+            Visitor.GEESE -> geese(horizon, t, seed, night)
+            Visitor.BATS -> bats(horizon, t, seed)
+            Visitor.OWL -> owl(horizon, seed, night, t)
+            Visitor.KITE -> kite(horizon, t, seed, m.wind)
+            Visitor.BALLOON -> balloon(horizon, t, seed)
+            Visitor.FIREFLIES -> fireflies(horizon, t, seed)
+        }
+    }
+}
+
+private fun dim(c: Color, night: Float) = lerp(c, Color(0xFF141B33), night * 0.7f)
+
+/** Le chalet : toit enneigé, fenêtre allumée, fumée qui monte. Tout l'hiver. */
+private fun DrawScope.cabin(m: Sky.Moment, horizon: Float, t: Float, night: Float) {
+    val rng = Random(m.day / 90 + 7)                 // il ne déménage pas chaque matin
+    val w = size.width * 0.17f
+    val x = size.width * (0.06f + rng.nextFloat() * 0.16f)
+    val h = w * 0.62f
+    val base = horizon + 2f
+
+    drawRect(dim(Color(0xFF8A5A3C), night), Offset(x, base - h), Size(w, h))
+    // Le toit dépasse des deux côtés, sinon la maison lit comme une boîte.
+    drawPath(
+        Path().apply {
+            moveTo(x - w * 0.14f, base - h)
+            lineTo(x + w / 2f, base - h * 1.62f)
+            lineTo(x + w * 1.14f, base - h)
+            close()
+        },
+        dim(Color(0xFF6B3F2A), night)
+    )
+    drawPath(
+        Path().apply {
+            moveTo(x - w * 0.14f, base - h)
+            lineTo(x + w / 2f, base - h * 1.62f)
+            lineTo(x + w * 1.14f, base - h)
+            lineTo(x + w * 1.14f, base - h * 1.06f)
+            lineTo(x - w * 0.14f, base - h * 1.06f)
+            close()
+        },
+        Color(0xFFFAFCFF)
+    )
+    // La fenêtre chaude : c'est elle, et rien d'autre, qui rend une cabane accueillante.
+    val glow = 0.75f + 0.25f * sin(t * 6f * 2f * PI).toFloat()
+    drawRect(
+        Color(0xFFFFC65A).copy(alpha = 0.30f * glow),
+        Offset(x + w * 0.18f, base - h * 0.86f), Size(w * 0.46f, h * 0.56f)
+    )
+    drawRect(
+        Color(0xFFFFD98A).copy(alpha = (0.75f + 0.25f * glow).coerceAtMost(1f)),
+        Offset(x + w * 0.26f, base - h * 0.78f), Size(w * 0.30f, h * 0.40f)
+    )
+
+    // La cheminée et sa fumée, qui monte en s'élargissant.
+    val cx = x + w * 0.82f
+    drawRect(dim(Color(0xFF6B3F2A), night), Offset(cx, base - h * 1.46f), Size(w * 0.12f, h * 0.42f))
+    repeat(4) { k ->
+        val p = (t * 2f + k * 0.25f) % 1f
+        val py = base - h * 1.5f - p * h * 1.5f
+        drawCircle(
+            Color(0xFFEFEFF6).copy(alpha = 0.36f * (1f - p)),
+            w * (0.05f + p * 0.10f),
+            Offset(cx + w * 0.06f + sin(p * 3f * PI).toFloat() * w * 0.08f, py)
+        )
+    }
+}
+
+/** Un bonhomme de neige, deux boules, un nez de carotte. */
+private fun DrawScope.snowman(horizon: Float, rng: Random, night: Float) {
+    val x = size.width * (0.55f + rng.nextFloat() * 0.35f)
+    val r = size.height * 0.018f
+    val base = horizon + 2f
+    val snow = lerp(Color.White, Color(0xFF2A3560), night * 0.55f)
+    drawCircle(snow, r * 1.5f, Offset(x, base - r * 1.5f))
+    drawCircle(snow, r, Offset(x, base - r * 3.6f))
+    drawCircle(Color(0xFF2B2B33), r * 0.16f, Offset(x - r * 0.34f, base - r * 3.8f))
+    drawCircle(Color(0xFF2B2B33), r * 0.16f, Offset(x + r * 0.34f, base - r * 3.8f))
+    drawPath(
+        Path().apply {
+            moveTo(x, base - r * 3.5f)
+            lineTo(x + r * 0.9f, base - r * 3.3f)
+            lineTo(x, base - r * 3.1f)
+            close()
+        },
+        Color(0xFFE8873A)
+    )
+    // L'écharpe, la seule tache de couleur.
+    drawRect(Color(0xFFE0435E), Offset(x - r * 0.9f, base - r * 2.9f), Size(r * 1.8f, r * 0.4f))
+}
+
+/** Un tapis de fleurs qui respirent, tout le printemps. */
+private fun DrawScope.blossoms(horizon: Float, m: Sky.Moment, t: Float) {
+    val rng = Random(m.day * 29 + 3)
+    val petals = listOf(Color(0xFFFF9EC4), Color(0xFFFFD1E8), Color(0xFFFFF3A8), Color(0xFFD6B0FF))
+    repeat(14) { k ->
+        val x = rng.nextFloat() * size.width
+        val y = horizon + size.height * (0.008f + rng.nextFloat() * 0.05f)
+        val r = size.height * 0.0055f
+        val sway = sin((t * 2f + k * 0.6f) * 2f * PI).toFloat() * r * 0.6f
+        val c = petals[rng.nextInt(petals.size)]
+        repeat(5) { i ->
+            val a = i * 2.0 * PI / 5.0
+            drawCircle(
+                c, r * 0.62f,
+                Offset(x + sway + (cos(a) * r).toFloat(), y + (sin(a) * r).toFloat())
+            )
+        }
+        drawCircle(Color(0xFFFFE066), r * 0.5f, Offset(x + sway, y))
+    }
+}
+
+/** Un chevreuil qui traverse : corps, cou, tête, et des bois. */
+private fun DrawScope.deer(horizon: Float, t: Float, rng: Random, night: Float) {
+    val p = (t + rng.nextFloat()) % 1f
+    val dir = if (rng.nextBoolean()) 1f else -1f
+    val x = if (dir > 0) p * size.width * 1.2f - size.width * 0.1f
+    else size.width * 1.1f - p * size.width * 1.2f
+    val h = size.height * 0.030f
+    val base = horizon + 3f
+    val body = dim(Color(0xFF9A6A42), night)
+    // Les pattes alternent : sans ça, il glisse au lieu de marcher.
+    val step = sin(p * 26f * 2f * PI).toFloat()
+
+    drawOval(body, Offset(x - h * 0.9f, base - h * 1.5f), Size(h * 1.8f, h * 0.85f))
+    listOf(-0.6f to step, -0.3f to -step, 0.4f to -step, 0.7f to step).forEach { (dx, s) ->
+        drawLine(
+            body, Offset(x + h * dx, base - h * 0.8f),
+            Offset(x + h * dx + s * h * 0.22f, base), strokeWidth = h * 0.13f
+        )
+    }
+    drawLine(
+        body, Offset(x + dir * h * 0.75f, base - h * 1.3f),
+        Offset(x + dir * h * 1.2f, base - h * 2.2f), strokeWidth = h * 0.24f
+    )
+    drawOval(
+        body,
+        Offset(x + dir * h * 1.05f - h * 0.28f, base - h * 2.5f), Size(h * 0.56f, h * 0.4f)
+    )
+    val antler = dim(Color(0xFFC9A57A), night)
+    listOf(-0.12f, 0.12f).forEach { o ->
+        val ax = x + dir * h * 1.15f + o * h
+        drawLine(antler, Offset(ax, base - h * 2.45f), Offset(ax + dir * h * 0.1f, base - h * 3.1f), strokeWidth = h * 0.08f)
+        drawLine(antler, Offset(ax + dir * h * 0.05f, base - h * 2.8f), Offset(ax - dir * h * 0.2f, base - h * 3.0f), strokeWidth = h * 0.07f)
+    }
+}
+
+/** Un renard : plus bas, plus long, et une queue épaisse à bout blanc. */
+private fun DrawScope.fox(horizon: Float, t: Float, rng: Random, night: Float) {
+    val p = (t * 2f + rng.nextFloat()) % 1f
+    val dir = if (rng.nextBoolean()) 1f else -1f
+    val x = if (dir > 0) p * size.width * 1.2f - size.width * 0.1f
+    else size.width * 1.1f - p * size.width * 1.2f
+    val h = size.height * 0.020f
+    val base = horizon + 3f
+    val body = dim(Color(0xFFE07A32), night)
+    val step = sin(p * 34f * 2f * PI).toFloat()
+
+    drawOval(body, Offset(x - h, base - h * 1.2f), Size(h * 2f, h * 0.7f))
+    listOf(-0.7f to step, 0.6f to -step).forEach { (dx, s) ->
+        drawLine(body, Offset(x + h * dx, base - h * 0.6f), Offset(x + h * dx + s * h * 0.2f, base), strokeWidth = h * 0.14f)
+    }
+    // La queue, presque aussi longue que lui.
+    drawOval(body, Offset(x - dir * h * 1.9f, base - h * 1.5f), Size(h * 1.1f, h * 0.5f))
+    drawOval(Color.White.copy(alpha = 0.9f), Offset(x - dir * h * 2.1f, base - h * 1.45f), Size(h * 0.35f, h * 0.4f))
+    drawOval(body, Offset(x + dir * h * 0.75f, base - h * 1.9f), Size(h * 0.7f, h * 0.55f))
+    drawPath(
+        Path().apply {
+            moveTo(x + dir * h * 0.9f, base - h * 1.85f)
+            lineTo(x + dir * h * 1.0f, base - h * 2.3f)
+            lineTo(x + dir * h * 1.2f, base - h * 1.8f)
+            close()
+        },
+        body
+    )
+}
+
+/** Un lapin qui fait des bonds : c'est la trajectoire en arcs qui le désigne. */
+private fun DrawScope.rabbit(horizon: Float, t: Float, rng: Random, night: Float) {
+    val p = (t * 2f + rng.nextFloat()) % 1f
+    val x = p * size.width * 1.15f - size.width * 0.08f
+    val h = size.height * 0.016f
+    val hop = abs(sin(p * 9f * PI).toFloat()) * h * 1.6f
+    val base = horizon + 3f - hop
+    val body = dim(Color(0xFFD8CFC4), night)
+
+    drawOval(body, Offset(x - h * 0.8f, base - h), Size(h * 1.6f, h * 0.9f))
+    drawOval(body, Offset(x + h * 0.4f, base - h * 1.6f), Size(h * 0.75f, h * 0.65f))
+    listOf(-0.05f, 0.25f).forEach { o ->
+        drawOval(body, Offset(x + h * (0.55f + o), base - h * 2.5f), Size(h * 0.22f, h * 1f))
+    }
+    drawCircle(Color.White.copy(alpha = 0.95f), h * 0.28f, Offset(x - h * 0.85f, base - h * 0.7f))
+}
+
+/** Un écureuil, arrêté, la queue en point d'interrogation. */
+private fun DrawScope.squirrel(horizon: Float, t: Float, rng: Random, night: Float) {
+    val x = size.width * (0.12f + rng.nextFloat() * 0.76f)
+    val h = size.height * 0.015f
+    val base = horizon + 3f
+    val body = dim(Color(0xFF9A6B4A), night)
+    // Il sursaute de temps en temps, sinon il n'a pas l'air vivant.
+    val twitch = if (((t * 5f + rng.nextFloat()) % 1f) < 0.08f) h * 0.2f else 0f
+
+    drawOval(body, Offset(x - h * 0.5f, base - h * 1.3f - twitch), Size(h, h * 1.3f))
+    drawOval(body, Offset(x - h * 0.35f, base - h * 2.1f - twitch), Size(h * 0.7f, h * 0.6f))
+    drawPath(
+        Path().apply {
+            moveTo(x - h * 0.5f, base - h * 0.3f)
+            quadraticBezierTo(x - h * 1.9f, base - h * 1.2f, x - h * 0.9f, base - h * 2.4f)
+            quadraticBezierTo(x - h * 1.5f, base - h * 1.3f, x - h * 0.3f, base - h * 0.6f)
+            close()
+        },
+        body
+    )
+}
+
+/** Une grenouille qui saute d'un bord à l'autre du bas de l'écran. */
+private fun DrawScope.frog(horizon: Float, t: Float, rng: Random, night: Float) {
+    val p = (t * 1.5f + rng.nextFloat()) % 1f
+    val x = p * size.width * 1.1f - size.width * 0.05f
+    val h = size.height * 0.013f
+    val hop = abs(sin(p * 7f * PI).toFloat()) * h * 2.2f
+    val base = horizon + size.height * 0.035f - hop
+    val body = dim(Color(0xFF6FC65A), night)
+
+    drawOval(body, Offset(x - h, base - h * 0.9f), Size(h * 2f, h * 1.1f))
+    listOf(-0.5f, 0.5f).forEach { o ->
+        drawCircle(body, h * 0.32f, Offset(x + h * o, base - h * 1.25f))
+        drawCircle(Color.White, h * 0.16f, Offset(x + h * o, base - h * 1.3f))
+        drawCircle(Color(0xFF1E2A18), h * 0.09f, Offset(x + h * o, base - h * 1.3f))
+    }
+    // Les pattes arrière repliées, tendues au sommet du saut.
+    val kick = hop / (h * 2.2f)
+    listOf(-1f, 1f).forEach { d ->
+        drawLine(
+            body, Offset(x + d * h * 0.7f, base - h * 0.3f),
+            Offset(x + d * h * (1.1f + kick * 0.6f), base + h * 0.2f), strokeWidth = h * 0.22f
+        )
+    }
+}
+
+/** Un papillon, qui flotte en huit et bat des ailes. */
+private fun DrawScope.butterfly(horizon: Float, t: Float, rng: Random) {
+    val p = (t * 1.2f + rng.nextFloat()) % 1f
+    val x = p * size.width * 1.1f - size.width * 0.05f
+    val y = horizon * (0.55f + 0.22f * sin(p * 5f * 2f * PI).toFloat())
+    val s = size.height * 0.010f
+    val flap = 0.35f + 0.65f * abs(sin(t * 40f * PI).toFloat())
+    val wings = listOf(Color(0xFFFF8FC6), Color(0xFFFFC46B), Color(0xFF9BD8FF))
+    val c = wings[rng.nextInt(wings.size)]
+
+    listOf(-1f, 1f).forEach { d ->
+        drawOval(
+            c.copy(alpha = 0.92f),
+            Offset(x + d * s * 0.15f - if (d < 0) s * flap else 0f, y - s * 0.7f),
+            Size(s * flap, s * 1.1f)
+        )
+        drawOval(
+            c.copy(alpha = 0.75f),
+            Offset(x + d * s * 0.1f - if (d < 0) s * flap * 0.7f else 0f, y),
+            Size(s * flap * 0.7f, s * 0.75f)
+        )
+    }
+    drawLine(Color(0xFF3A2A34), Offset(x, y - s * 0.6f), Offset(x, y + s * 0.5f), strokeWidth = s * 0.22f)
+}
+
+/** Des outardes en V, l'automne. Le son en moins. */
+private fun DrawScope.geese(horizon: Float, t: Float, rng: Random, night: Float) {
+    val p = (t * 0.6f + rng.nextFloat()) % 1f
+    val lead = Offset(p * size.width * 1.3f - size.width * 0.15f, horizon * (0.16f + rng.nextFloat() * 0.2f))
+    val s = size.height * 0.008f
+    val ink = dim(Color(0xFF3A3F55), night * 0.4f)
+    repeat(7) { k ->
+        val row = (k + 1) / 2
+        val side = if (k % 2 == 0) -1 else 1
+        val gx = lead.x - row * s * 2.2f
+        val gy = lead.y + row * s * 1.3f * side
+        // Chaque oiseau bat un peu décalé : un vol synchrone au battement près est faux.
+        val beat = sin((t * 26f + k * 0.5f) * 2f * PI).toFloat() * s * 0.55f
+        drawLine(ink, Offset(gx - s, gy + beat), Offset(gx, gy - beat * 0.3f), strokeWidth = s * 0.34f)
+        drawLine(ink, Offset(gx, gy - beat * 0.3f), Offset(gx + s, gy + beat), strokeWidth = s * 0.34f)
+    }
+}
+
+/** Des chauves-souris, la semaine de l'Halloween seulement. */
+private fun DrawScope.bats(horizon: Float, t: Float, rng: Random) {
+    repeat(5) { k ->
+        val p = (t * 1.4f + k * 0.19f + rng.nextFloat()) % 1f
+        val x = p * size.width * 1.2f - size.width * 0.1f
+        val y = horizon * (0.2f + 0.3f * sin((p * 3f + k) * 2f * PI).toFloat() + k * 0.05f)
+        val s = size.height * 0.007f
+        val flap = sin((t * 30f + k) * 2f * PI).toFloat() * s * 0.7f
+        val ink = Color(0xFF241B33)
+        drawPath(
+            Path().apply {
+                moveTo(x, y)
+                quadraticBezierTo(x - s, y - s * 0.9f - flap, x - s * 2f, y + flap * 0.4f)
+                quadraticBezierTo(x - s, y + s * 0.4f, x, y)
+                quadraticBezierTo(x + s, y + s * 0.4f, x + s * 2f, y + flap * 0.4f)
+                quadraticBezierTo(x + s, y - s * 0.9f - flap, x, y)
+                close()
+            },
+            ink
+        )
+    }
+}
+
+/** Un hibou posé, qui cligne des yeux. La nuit uniquement. */
+private fun DrawScope.owl(horizon: Float, rng: Random, night: Float, t: Float) {
+    val x = size.width * (0.1f + rng.nextFloat() * 0.8f)
+    val h = size.height * 0.020f
+    val base = horizon - h * 0.2f
+    val body = dim(Color(0xFF8A7A6A), night * 0.5f)
+
+    drawOval(body, Offset(x - h * 0.6f, base - h * 1.6f), Size(h * 1.2f, h * 1.6f))
+    listOf(-0.35f, 0.35f).forEach { o ->
+        drawPath(
+            Path().apply {
+                moveTo(x + h * o - h * 0.2f, base - h * 1.45f)
+                lineTo(x + h * o + h * 0.05f, base - h * 1.95f)
+                lineTo(x + h * o + h * 0.28f, base - h * 1.45f)
+                close()
+            },
+            body
+        )
+    }
+    // Le clignement : les yeux se ferment un bref instant, à intervalles irréguliers.
+    val open = ((t * 4f + rng.nextFloat()) % 1f) > 0.06f
+    listOf(-0.28f, 0.28f).forEach { o ->
+        drawCircle(Color(0xFFF2E2B8), h * 0.28f, Offset(x + h * o, base - h * 1.25f))
+        if (open) drawCircle(Color(0xFF2B2118), h * 0.14f, Offset(x + h * o, base - h * 1.25f))
+    }
+    drawPath(
+        Path().apply {
+            moveTo(x, base - h * 1.18f); lineTo(x - h * 0.09f, base - h * 1.02f)
+            lineTo(x + h * 0.09f, base - h * 1.02f); close()
+        },
+        Color(0xFFE0A044)
+    )
+}
+
+/** Un cerf-volant, les jours de vent au printemps. */
+private fun DrawScope.kite(horizon: Float, t: Float, rng: Random, wind: Float) {
+    val drift = sin((t * 1.4f + rng.nextFloat()) * 2f * PI).toFloat()
+    val x = size.width * (0.5f + drift * 0.32f)
+    val y = horizon * (0.24f + 0.12f * sin((t * 2.3f) * 2f * PI).toFloat())
+    val s = size.height * 0.020f
+    val tilt = drift * (8f + wind * 22f)
+
+    rotate(tilt, Offset(x, y)) {
+        drawPath(
+            Path().apply {
+                moveTo(x, y - s); lineTo(x + s * 0.7f, y)
+                lineTo(x, y + s * 1.3f); lineTo(x - s * 0.7f, y); close()
+            },
+            Color(0xFFFF6FA8)
+        )
+        drawPath(
+            Path().apply {
+                moveTo(x, y - s); lineTo(x + s * 0.7f, y); lineTo(x, y + s * 1.3f); close()
+            },
+            Color(0xFFFFC46B)
+        )
+        // La queue à nœuds, qui ondule.
+        repeat(4) { k ->
+            val ky = y + s * (1.5f + k * 0.55f)
+            val kx = x + sin((t * 6f + k) * 2f * PI).toFloat() * s * 0.35f
+            drawCircle(Color(0xFF9BD8FF), s * 0.14f, Offset(kx, ky))
+        }
+    }
+}
+
+/** Une montgolfière qui traverse doucement, l'été. */
+private fun DrawScope.balloon(horizon: Float, t: Float, rng: Random) {
+    val p = (t * 0.35f + rng.nextFloat()) % 1f
+    val x = p * size.width * 1.25f - size.width * 0.12f
+    val y = horizon * (0.2f + 0.1f * sin(p * 4f * 2f * PI).toFloat())
+    val r = size.height * 0.026f
+
+    drawOval(Color(0xFFFF7BA8), Offset(x - r, y - r), Size(r * 2f, r * 2.3f))
+    drawOval(Color(0xFFFFD166), Offset(x - r * 0.34f, y - r), Size(r * 0.68f, r * 2.3f))
+    drawOval(Color(0xFF6FD3E0).copy(alpha = 0.85f), Offset(x - r, y - r), Size(r * 0.4f, r * 2.3f))
+    drawLine(Color(0xFF6B4A32), Offset(x - r * 0.4f, y + r * 1.25f), Offset(x - r * 0.25f, y + r * 1.75f), strokeWidth = r * 0.08f)
+    drawLine(Color(0xFF6B4A32), Offset(x + r * 0.4f, y + r * 1.25f), Offset(x + r * 0.25f, y + r * 1.75f), strokeWidth = r * 0.08f)
+    drawRect(Color(0xFF9A6B3F), Offset(x - r * 0.3f, y + r * 1.7f), Size(r * 0.6f, r * 0.45f))
+}
+
+/** Des lucioles, les nuits d'été : elles s'allument et s'éteignent chacune à son rythme. */
+private fun DrawScope.fireflies(horizon: Float, t: Float, rng: Random) {
+    repeat(16) { k ->
+        val bx = rng.nextFloat()
+        val by = rng.nextFloat()
+        val x = (bx + sin((t * 1.2f + k) * 2f * PI).toFloat() * 0.03f) * size.width
+        val y = horizon * (0.55f + by * 0.5f) + sin((t * 1.7f + k * 2f) * 2f * PI).toFloat() * horizon * 0.03f
+        val on = (0.5f + 0.5f * sin((t * 6f + k * 1.3f) * 2f * PI).toFloat())
+        val glow = Color(0xFFFFF07A)
+        drawCircle(glow.copy(alpha = 0.28f * on), 7f, Offset(x, y))
+        drawCircle(glow.copy(alpha = on), 2.2f, Offset(x, y))
     }
 }

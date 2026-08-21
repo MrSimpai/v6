@@ -1399,7 +1399,10 @@ object Dragon {
 
         snout(c)
         eyes(c, mood)
+        lashes(c, mood)
         mouth(c, mood)
+        // Les joues par-dessus l'œil : posées avant, le blanc de l'œil les mangeait.
+        cheeks(c, mood)
         if (mood == Mood.Sad) tears(c)
     }
 
@@ -1437,21 +1440,78 @@ object Dragon {
      * Museau de la couleur du corps, avec une simple tache chaude et deux narines.
      * Pas de plaque pâle contrastante : ça se lirait comme un second visage.
      */
+    /**
+     * Le museau : un petit nez en cœur, et rien d'autre.
+     *
+     * Il y avait ici un large ovale plus clair percé de deux narines rondes, à hauteur du
+     * milieu de la figure. Deux trous côte à côte sur un groin pâle, ça ne se lit que d'une
+     * façon, et ce n'était pas « dragon ». Le museau est maintenant de la couleur du
+     * visage — donc invisible en tant que forme — et il ne reste qu'un cœur minuscule posé
+     * haut, comme le nez d'un chat.
+     *
+     * Les joues roses et les deux reflets font le reste : c'est de ça qu'est faite une
+     * frimousse, pas d'un nez détaillé.
+     */
     private fun snout(c: Canvas) {
-        c.drawOval(oval(110f, 94f, 15f, 11f), fill(Pink))
-        c.drawOval(oval(110f, 92f, 7.5f, 5f), fill(Blush).apply { alpha = 205 })
+        // Une ombre très douce sous les yeux, juste pour donner du volume au museau.
+        c.drawOval(oval(110f, 96f, 13f, 9f), fill(Crown).apply { alpha = 70 })
         p.alpha = 255
-        c.drawCircle(106f, 91f, 1.7f, fill(PinkDeep))
-        c.drawCircle(114f, 91f, 1.7f, fill(PinkDeep))
+
+        // Le nez en cœur, petit et haut placé.
+        Path().apply {
+            moveTo(110f, 95f)
+            cubicTo(103f, 89f, 104f, 84f, 107.5f, 84f)
+            cubicTo(109.3f, 84f, 110f, 85.6f, 110f, 86.6f)
+            cubicTo(110f, 85.6f, 110.7f, 84f, 112.5f, 84f)
+            cubicTo(116f, 84f, 117f, 89f, 110f, 95f)
+            close()
+        }.also { c.drawPath(it, fill(PinkDeep)) }
+        c.drawCircle(107.6f, 87f, 1.15f, fill(White).apply { alpha = 190 })
+        p.alpha = 255
+    }
+
+    /** Les joues, posées après les yeux pour rester au-dessus du blanc de l'œil. */
+    private fun cheeks(c: Canvas, mood: Mood) {
+        val a = when (mood) {
+            Mood.Love, Mood.Cheering, Mood.Proud -> 175
+            Mood.Sad, Mood.Pleading -> 150
+            else -> 120
+        }
+        listOf(78f, 142f).forEach { x ->
+            c.drawOval(oval(x, 90f, 11f, 7f), fill(Blush).apply { alpha = a })
+        }
+        p.alpha = 255
+    }
+
+    /**
+     * Trois cils au coin externe de chaque œil.
+     *
+     * Ils ne sont pas dessinés sur les humeurs où les yeux sont des traits fermés : sur un
+     * arc, les cils se confondent avec le trait et le visage devient une tache.
+     */
+    private fun lashes(c: Canvas, mood: Mood) {
+        if (mood == Mood.Sleeping || mood == Mood.Cheering || mood == Mood.Proud) return
+        val lash = stroke(Ink, 2.2f)
+        listOf(92f to -1f, 128f to 1f).forEach { (x, d) ->
+            c.drawLine(x + d * 13f, 74f, x + d * 19f, 69f, lash)
+            c.drawLine(x + d * 14f, 79f, x + d * 21f, 77f, lash)
+            c.drawLine(x + d * 12f, 68f, x + d * 16f, 62f, lash)
+        }
     }
 
     private fun eyes(c: Canvas, mood: Mood) {
         val l = PointF(92f, 80f); val r = PointF(128f, 80f)
         when (mood) {
+            // Deux reflets et non un : le petit en bas à l'opposé du grand est ce qui
+            // donne le vernis. Un œil à un seul reflet reste un bouton.
             Mood.Waiting -> listOf(l, r).forEach {
-                c.drawCircle(it.x, it.y, 12.5f, fill(White))
-                c.drawCircle(it.x, it.y + 1f, 7f, fill(Ink))
-                c.drawCircle(it.x + 3.5f, it.y - 3.5f, 2.8f, fill(White))
+                c.drawCircle(it.x, it.y, 13.5f, fill(White))
+                c.drawCircle(it.x, it.y + 1.5f, 8.4f, fill(Ink))
+                c.drawCircle(it.x, it.y + 4f, 3.4f, fill(Crown).apply { alpha = 150 })
+                p.alpha = 255
+                c.drawCircle(it.x + 4f, it.y - 4f, 3.4f, fill(White))
+                c.drawCircle(it.x - 4f, it.y + 5f, 1.7f, fill(White).apply { alpha = 205 })
+                p.alpha = 255
             }
             Mood.Overdue -> listOf(l to 1f, r to -1f).forEach { (e, d) ->
                 Path().apply {
