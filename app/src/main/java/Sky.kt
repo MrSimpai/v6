@@ -6,6 +6,7 @@ import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -191,7 +192,14 @@ object Sky {
         val rng = Random(dayIndex(now) * 401 + 29)
         val base = rng.nextFloat()
         // Une queue : la plupart des jours sont calmes, quelques-uns sont des tempêtes.
-        return (base * base * 1.25f).coerceIn(0f, 1f)
+        //
+        // L'exposant est passé de 2 à 1,7 et le facteur de 1,25 à 1,4 : les journées
+        // calmes le restent, mais le haut de la distribution est nettement plus gras. Le
+        // vent plafonnait en pratique autour des trois quarts, et comme il ne penchait
+        // les arbres que de seize pixels au maximum, une « tempête » ressemblait à une
+        // brise. La force se voit dans [windSway], pas ici — mais il fallait d'abord
+        // qu'il y ait des journées vraiment ventées à afficher.
+        return (base.pow(1.7f) * 1.4f).coerceIn(0f, 1f)
     }
 
     /** Orage ou poudrerie : rare, et seulement quand il tombe déjà quelque chose. */

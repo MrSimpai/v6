@@ -228,7 +228,29 @@ object Cosmetics {
         Cosmetic("bas_noel", "Les bas de Noël", Slot.FEET,
             "Rouges et blancs, rayés. Portés du premier décembre au mois de mars."),
         Cosmetic("bas_halloween", "Les bas d'Halloween", Slot.FEET,
-            "Orange et noir. Assortis à absolument rien d'autre.")
+            "Orange et noir. Assortis à absolument rien d'autre."),
+
+        // ---- la deuxième fournée ----
+        Cosmetic("noeud", "Le gros nœud", Slot.HEAD,
+            "Deux fois trop grand pour sa tête, ce qui est exactement la bonne taille."),
+        Cosmetic("cache_oreilles", "Les cache-oreilles", Slot.HEAD,
+            "En fourrure, sur un arceau. Elle n'entend plus rien et ça lui va très bien."),
+        Cosmetic("licorne", "La corne de licorne", Slot.HEAD,
+            "Dorée, torsadée, tenue par un élastique. Un dragon licorne. Personne ne conteste."),
+        Cosmetic("foulard", "Le foulard rayé", Slot.BODY,
+            "Trois tours de cou, les deux bouts qui traînent. Tricoté par quelqu'un de patient."),
+        Cosmetic("tutu", "Le tutu", Slot.BODY,
+            "Rose, en trois épaisseurs. Elle a décidé qu'elle faisait du ballet aujourd'hui."),
+        Cosmetic("raquettes", "Les raquettes", Slot.FEET,
+            "Babiches tressées, lanières de cuir. Elle traverse le banc de neige sans caler."),
+        Cosmetic("pantoufles_lapin", "Les pantoufles-lapin", Slot.FEET,
+            "Deux oreilles, deux yeux, un nez rose. Elles la regardent pendant qu'elle marche."),
+        Cosmetic("licorne_peluche", "La licorne en peluche", Slot.FRIEND,
+            "Crinière arc-en-ciel, corne dorée, air profondément serein."),
+        Cosmetic("pingouin", "Le pingouin en peluche", Slot.FRIEND,
+            "Ventre blanc, deux nageoires, des pattes orange. Il tombe tout le temps vers l'avant."),
+        Cosmetic("ailes_etoilees", "Les ailes étoilées", Slot.WINGS,
+            "Bleu nuit percé d'étoiles. On dirait qu'elle a découpé un morceau de ciel.")
     )
 
     /** Combien de temps dure la cabine d'essayage. */

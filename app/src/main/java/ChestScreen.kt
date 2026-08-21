@@ -88,30 +88,70 @@ fun ChestScreen(cosmetic: Cosmetic, onDone: () -> Unit) {
 
     val shake = remember { Animatable(0f) }
     val squash = remember { Animatable(1f) }     // l'anticipation : il se tasse
+    val glow = remember { Animatable(0f) }       // la lumière qui filtre par la fente
+    val hover = remember { Animatable(0f) }      // il décolle avant de céder
     val lid = remember { Animatable(0f) }
     val reveal = remember { Animatable(0f) }
     val flash = remember { Animatable(0f) }
     val shock = remember { Animatable(0f) }      // l'onde de choc
 
     LaunchedEffect(cosmetic.id) {
-        // Trois secousses, chacune plus courte et plus forte que la précédente.
-        repeat(3) { i ->
+        // Le coffre s'ouvrait en une seconde et demie, dont une bonne moitié en secousses
+        // identiques. C'est trop court pour qu'il se passe quoi que ce soit dans la tête :
+        // on voyait un couvercle sauter avant d'avoir eu le temps de vouloir qu'il saute.
+        //
+        // Ce qui rend un coffre satisfaisant, ce n'est pas l'ouverture, c'est le REFUS de
+        // s'ouvrir. Alors il résiste maintenant pendant trois secondes et demie, en quatre
+        // temps qui montent : trois sursauts de plus en plus francs, un roulement, et un
+        // silence. La récompense n'a pas changé — c'est l'attente qui la fabrique.
+
+        // Un temps mort d'abord : sans lui, l'animation a déjà commencé quand l'œil
+        // arrive dessus, et on rate le premier tiers.
+        delay(280)
+
+        // Premier temps. Trois sursauts, chacun plus ample que le précédent, séparés par
+        // des silences de plus en plus COURTS. C'est le raccourcissement des silences qui
+        // fait monter la tension, pas l'amplitude des coups.
+        listOf(0.34f, 0.62f, 1f).forEachIndexed { i, amp ->
             buzzPattern(
                 ctx,
-                longArrayOf(0, 30L + i * 15L, 40L, 30L + i * 15L),
-                intArrayOf(0, 70 + i * 50, 0, 70 + i * 50)
+                longArrayOf(0, 26L + i * 16L, 44L, 26L + i * 16L),
+                intArrayOf(0, 60 + i * 55, 0, 60 + i * 55)
             )
-            val d = 105 - i * 22
-            shake.animateTo(1f, tween(d, easing = FastOutLinearInEasing))
-            shake.animateTo(-1f, tween(d, easing = FastOutLinearInEasing))
-            shake.animateTo(0f, tween(d, easing = FastOutSlowInEasing))
-            delay(170L - i * 55L)
+            val d = 132 - i * 20
+            shake.animateTo(amp, tween(d, easing = FastOutLinearInEasing))
+            shake.animateTo(-amp * 0.92f, tween(d, easing = FastOutLinearInEasing))
+            shake.animateTo(amp * 0.42f, tween(d, easing = FastOutLinearInEasing))
+            shake.animateTo(0f, tween(d + 46, easing = FastOutSlowInEasing))
+            // À chaque sursaut, un peu plus de lumière sort de la fente : quelque chose
+            // là-dedans est en train de se réveiller.
+            launch { glow.animateTo(0.22f + i * 0.26f, tween(320)) }
+            delay(430L - i * 125L)
         }
 
-        // L'anticipation. Il se tasse, et surtout il s'immobilise.
-        squash.animateTo(0.82f, tween(180, easing = FastOutSlowInEasing))
-        buzzPattern(ctx, longArrayOf(0, 220), intArrayOf(0, 40))
-        delay(200)
+        // Deuxième temps : le roulement. Des secousses courtes et serrées qui accélèrent,
+        // pendant que le coffre décolle et que la lumière monte au maximum.
+        launch { glow.animateTo(1f, tween(700)) }
+        launch { hover.animateTo(1f, tween(700, easing = FastOutSlowInEasing)) }
+        buzzPattern(
+            ctx,
+            longArrayOf(0, 46, 26, 46, 22, 52, 18, 58, 14, 64, 12, 80),
+            intArrayOf(0, 55, 0, 80, 0, 110, 0, 145, 0, 185, 0, 225)
+        )
+        repeat(9) { k ->
+            val a = 0.14f + k * 0.052f
+            shake.animateTo(if (k % 2 == 0) a else -a, tween(48 - k * 2, easing = LinearEasing))
+        }
+        shake.animateTo(0f, tween(70))
+
+        // Troisième temps : LE SILENCE. Il retombe, se tasse, la lumière faiblit et plus
+        // rien ne bouge pendant un tiers de seconde. C'est le temps le plus important de
+        // toute la séquence, et c'est le seul où il ne se passe rien.
+        launch { glow.animateTo(0.30f, tween(200)) }
+        launch { hover.animateTo(0f, tween(210)) }
+        squash.animateTo(0.78f, tween(230, easing = FastOutSlowInEasing))
+        buzzPattern(ctx, longArrayOf(0, 270), intArrayOf(0, 28))
+        delay(320)
 
         // La décharge.
         opened = true
@@ -120,8 +160,9 @@ fun ChestScreen(cosmetic: Cosmetic, onDone: () -> Unit) {
             longArrayOf(0, 60, 30, 110, 40, 60, 60, 40),
             intArrayOf(0, 255, 0, 210, 0, 150, 0, 90)
         )
-        launch { flash.animateTo(1f, tween(60)); flash.animateTo(0f, tween(420)) }
-        launch { shock.animateTo(1f, tween(620, easing = LinearOutSlowInEasing)) }
+        launch { glow.animateTo(1f, tween(90)) }
+        launch { flash.animateTo(1f, tween(60)); flash.animateTo(0f, tween(460)) }
+        launch { shock.animateTo(1f, tween(680, easing = LinearOutSlowInEasing)) }
         launch { squash.animateTo(1.08f, spring(0.32f, Spring.StiffnessMedium)) }
         lid.animateTo(1f, spring(dampingRatio = 0.46f, stiffness = Spring.StiffnessVeryLow))
     }
@@ -176,7 +217,7 @@ fun ChestScreen(cosmetic: Cosmetic, onDone: () -> Unit) {
                                 lineTo(c.x + cos(a1) * r, c.y + sin(a1) * r)
                                 close()
                             },
-                            Pal.Butter.copy(alpha = 0.34f * reveal.value)
+                            ShellHi.copy(alpha = 0.40f * reveal.value)
                         )
                     }
                 }
@@ -185,7 +226,7 @@ fun ChestScreen(cosmetic: Cosmetic, onDone: () -> Unit) {
                 if (shock.value in 0.001f..0.999f) {
                     val e = shock.value
                     drawCircle(
-                        Pal.Iris.copy(alpha = (1f - e) * 0.55f),
+                        Shell.copy(alpha = (1f - e) * 0.6f),
                         size.minDimension * 0.12f + e * size.maxDimension * 0.62f,
                         c,
                         style = Stroke(width = (1f - e) * 26f + 2f)
@@ -212,6 +253,8 @@ fun ChestScreen(cosmetic: Cosmetic, onDone: () -> Unit) {
                     shake = shake.value,
                     squash = squash.value,
                     lid = lid.value,
+                    glow = glow.value,
+                    hover = hover.value,
                     modifier = Modifier.fillMaxSize()
                 )
                 if (opened) {
@@ -257,7 +300,9 @@ fun ChestScreen(cosmetic: Cosmetic, onDone: () -> Unit) {
         // couvercle saute, et qui fait qu'on ne voit pas la couture.
         if (flash.value > 0.001f) {
             Canvas(Modifier.fillMaxSize()) {
-                drawRect(Color.White.copy(alpha = flash.value * 0.85f))
+                // Blanc légèrement rosé plutôt que blanc pur : un flash neutre a l'air
+                // d'un écran qui saute, un flash teinté a l'air de faire partie de la fête.
+                drawRect(Color(0xFFFFF4F8).copy(alpha = flash.value * 0.85f))
             }
         }
 
@@ -349,43 +394,143 @@ private fun DrawScope.fireworks(t: Float, alpha: Float) {
 
 // ---- le coffre -------------------------------------------------------------
 
-/** Le coffre lui-même : caisse, couvercle, ferrures. Dessiné, pas une image. */
+// La palette du coffre : framboise et or. Il était crème et violet, c'est-à-dire les
+// couleurs de l'app et de rien d'autre — un meuble. Un coffre doit avoir l'air d'un objet
+// PRÉCIEUX, et le rose bonbon bordé d'or est exactement ce vocabulaire-là.
+private val ShellHi = Color(0xFFFFD3E4)
+private val Shell = Color(0xFFFF9EC8)
+private val ShellLo = Color(0xFFE8639C)
+private val Band = Color(0xFFD8447F)
+private val Gold = Color(0xFFFFDE9B)
+private val GoldLo = Color(0xFFF0B44E)
+private val Inside = Color(0xFF7A2247)
+private val Light = Color(0xFFFFF6DC)
+
+/**
+ * Le coffre lui-même : caisse, couvercle, ferrures, ruban. Dessiné, pas une image.
+ *
+ * `glow` est la lumière qui filtre par la fente du couvercle pendant que le coffre
+ * résiste. C'est la seule chose qui dit qu'il y a QUELQUE CHOSE dedans : sans elle, les
+ * secousses ne sont qu'une boîte qui bouge, et rien ne justifie d'attendre trois secondes.
+ * `hover` le décolle du sol juste avant qu'il cède.
+ */
 @Composable
-private fun Chest(shake: Float, squash: Float, lid: Float, modifier: Modifier) {
+private fun Chest(
+    shake: Float,
+    squash: Float,
+    lid: Float,
+    glow: Float,
+    hover: Float,
+    modifier: Modifier
+) {
     Canvas(modifier) {
         val w = size.minDimension
         val s = w / 220f
         val cx = size.width / 2f
-        val baseY = size.height * 0.68f
+        val floorY = size.height * 0.68f
+        val baseY = floorY - hover * 12f * s
+
+        // Le halo : il grossit avec la lumière intérieure et déborde du coffre.
+        if (glow > 0.01f) {
+            drawCircle(
+                Brush.radialGradient(
+                    listOf(
+                        Color(0xFFFFC7E0).copy(alpha = 0.55f * glow),
+                        Color(0x00FFC7E0)
+                    ),
+                    center = Offset(cx, baseY - 30 * s),
+                    radius = (70f + glow * 90f) * s
+                ),
+                (70f + glow * 90f) * s,
+                Offset(cx, baseY - 30 * s)
+            )
+        }
+
+        // L'ombre portée : elle rétrécit et pâlit quand le coffre décolle. C'est elle qui
+        // rend le décollage lisible — sans ombre, un objet qui monte a juste changé de
+        // place.
+        drawOval(
+            Color(0xFF6B2A45).copy(alpha = 0.20f * (1f - hover * 0.55f)),
+            Offset(cx - (72f - hover * 12f) * s, floorY + 18 * s),
+            Size((144f - hover * 24f) * s, 16 * s)
+        )
 
         rotate(shake * 7f, Offset(cx, baseY)) {
             // Le tassement : plus large quand il s'écrase, plus étroit quand il rebondit.
             // Un objet qui se déforme a du poids ; un objet rigide qui saute n'en a pas.
             val sx = 2f - squash
             withTransform({ scale(sx, squash, Offset(cx, baseY)) }) {
+                // La caisse, en dégradé : clair en haut, framboise en bas. Un aplat unique
+                // se lit comme un rectangle de couleur ; le dégradé lui donne un volume.
                 drawRoundRect(
-                    Pal.Butter,
+                    Brush.verticalGradient(
+                        listOf(Shell, ShellLo),
+                        startY = baseY - 54 * s, endY = baseY + 24 * s
+                    ),
                     Offset(cx - 74 * s, baseY - 54 * s), Size(148 * s, 78 * s),
-                    CornerRadius(10 * s)
+                    CornerRadius(14 * s)
                 )
-                drawRect(Pal.Iris, Offset(cx - 74 * s, baseY - 10 * s), Size(148 * s, 16 * s))
+                // Le reflet du haut, sur le bord gauche : la lumière vient toujours du
+                // même coin dans toute l'app.
                 drawRoundRect(
-                    Pal.Iris,
-                    Offset(cx - 13 * s, baseY - 22 * s), Size(26 * s, 30 * s),
-                    CornerRadius(5 * s)
+                    ShellHi.copy(alpha = 0.6f),
+                    Offset(cx - 66 * s, baseY - 47 * s), Size(52 * s, 12 * s),
+                    CornerRadius(6 * s)
                 )
+
+                // Les deux sangles verticales et la ceinture, en framboise foncée.
+                listOf(-46f, 46f).forEach { dx ->
+                    drawRect(
+                        Band.copy(alpha = 0.85f),
+                        Offset(cx + (dx - 7) * s, baseY - 54 * s), Size(14 * s, 78 * s)
+                    )
+                }
+                drawRect(Band, Offset(cx - 74 * s, baseY - 12 * s), Size(148 * s, 18 * s))
+                drawRect(
+                    GoldLo.copy(alpha = 0.5f),
+                    Offset(cx - 74 * s, baseY - 13 * s), Size(148 * s, 2.5f * s)
+                )
+
+                // Trois petits cœurs sur le panneau : c'est un cadeau, pas un colis.
+                listOf(-24f to -34f, 0f to -28f, 24f to -34f).forEach { (dx, dy) ->
+                    heart(Offset(cx + dx * s, baseY + dy * s), 6.5f * s, ShellHi.copy(alpha = 0.55f))
+                }
+
+                // La serrure : un cœur d'or. Un rectangle faisait cadenas de valise.
+                heart(Offset(cx, baseY - 3 * s), 15 * s, GoldLo)
+                heart(Offset(cx, baseY - 4 * s), 13 * s, Gold)
+                drawCircle(Inside.copy(alpha = 0.55f), 3.2f * s, Offset(cx, baseY - 2 * s))
+
                 // L'intérieur, qui se découvre quand le couvercle part.
                 if (lid > 0.05f) {
                     drawRoundRect(
-                        Color(0xFF6B2A45).copy(alpha = (lid * 2f).coerceAtMost(1f)),
+                        Inside.copy(alpha = (lid * 2f).coerceAtMost(1f)),
                         Offset(cx - 66 * s, baseY - 58 * s), Size(132 * s, 18 * s),
-                        CornerRadius(6 * s)
+                        CornerRadius(7 * s)
                     )
                     drawOval(
-                        Color(0xFFFFF3C4).copy(alpha = 0.55f * lid),
-                        Offset(cx - 58 * s, baseY - 72 * s), Size(116 * s, 30 * s)
+                        Light.copy(alpha = 0.6f * lid),
+                        Offset(cx - 58 * s, baseY - 74 * s), Size(116 * s, 32 * s)
                     )
                 }
+            }
+
+            // La FENTE. Tant que le couvercle tient, une ligne de lumière court le long du
+            // joint et déborde un peu de chaque côté. C'est tout ce qu'il faut pour qu'on
+            // veuille savoir ce qu'il y a dessous.
+            if (lid < 0.2f && glow > 0.01f) {
+                val g = glow * (1f - lid * 5f).coerceIn(0f, 1f)
+                val seamY = baseY - 55 * s
+                drawRoundRect(
+                    Light.copy(alpha = 0.9f * g),
+                    Offset(cx - 70 * s, seamY - 2.5f * s * g), Size(140 * s, 5f * s * g + 1f),
+                    CornerRadius(3 * s)
+                )
+                drawRoundRect(
+                    Color(0xFFFFB8D8).copy(alpha = 0.5f * g),
+                    Offset(cx - 78 * s, seamY - 9 * s * g), Size(156 * s, 18 * s * g + 1f),
+                    CornerRadius(9 * s)
+                )
             }
 
             // Le couvercle : il monte, bascule, et part légèrement de côté — un couvercle
@@ -393,16 +538,56 @@ private fun Chest(shake: Float, squash: Float, lid: Float, modifier: Modifier) {
             val liftY = -lid * 74 * s
             val slideX = lid * 16 * s
             rotate(-lid * 34f, Offset(cx - 74 * s + slideX, baseY - 54 * s + liftY)) {
+                val top = baseY - 84 * s + liftY
                 drawRoundRect(
-                    Pal.Butter,
-                    Offset(cx - 78 * s + slideX, baseY - 84 * s + liftY), Size(156 * s, 34 * s),
-                    CornerRadius(12 * s)
+                    Brush.verticalGradient(
+                        listOf(ShellHi, Shell), startY = top, endY = top + 34 * s
+                    ),
+                    Offset(cx - 78 * s + slideX, top), Size(156 * s, 34 * s),
+                    CornerRadius(15 * s)
                 )
                 drawRect(
-                    Pal.Iris,
-                    Offset(cx - 78 * s + slideX, baseY - 60 * s + liftY), Size(156 * s, 10 * s)
+                    Band,
+                    Offset(cx - 78 * s + slideX, top + 24 * s), Size(156 * s, 12 * s)
                 )
+                listOf(-46f, 46f).forEach { dx ->
+                    drawRect(
+                        Band.copy(alpha = 0.85f),
+                        Offset(cx + (dx - 7) * s + slideX, top), Size(14 * s, 34 * s)
+                    )
+                }
+                // Le nœud sur le dessus : deux boucles et un centre doré.
+                val bx = cx + slideX
+                listOf(-1f, 1f).forEach { d ->
+                    drawPath(
+                        Path().apply {
+                            moveTo(bx, top + 4 * s)
+                            quadraticBezierTo(bx + d * 30 * s, top - 14 * s, bx + d * 26 * s, top + 2 * s)
+                            quadraticBezierTo(bx + d * 22 * s, top + 11 * s, bx, top + 5 * s)
+                            close()
+                        },
+                        Gold
+                    )
+                }
+                drawCircle(GoldLo, 6 * s, Offset(bx, top + 4 * s))
+                drawCircle(Light.copy(alpha = 0.7f), 2.4f * s, Offset(bx - 1.6f * s, top + 2.4f * s))
             }
         }
     }
+}
+
+/** Un cœur plein, centré, de rayon `r`. Le même tracé que les feux d'artifice. */
+private fun DrawScope.heart(center: Offset, r: Float, color: Color) {
+    drawPath(
+        Path().apply {
+            for (k in 0..28) {
+                val (dx, dy) = heartPoint(k / 28f * 2f * PI.toFloat())
+                val px = center.x + dx * r
+                val py = center.y + dy * r
+                if (k == 0) moveTo(px, py) else lineTo(px, py)
+            }
+            close()
+        },
+        color
+    )
 }

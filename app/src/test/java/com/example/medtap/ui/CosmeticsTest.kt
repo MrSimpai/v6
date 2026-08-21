@@ -35,6 +35,39 @@ class CosmeticsTest {
         assertEquals(ids.size, ids.toSet().size)
     }
 
+    /**
+     * Aucune pièce muette.
+     *
+     * Le nom sort dans le coffre en trente points et le blurb juste en dessous : une
+     * chaîne vide ne planterait rien, elle donnerait un écran de récompense à moitié
+     * blanc le jour où la pièce tombe — c'est-à-dire une fois, et sans rattrapage.
+     */
+    @Test fun `chaque piece a un nom et une phrase`() {
+        Cosmetics.ALL.forEach {
+            assertTrue(it.id, it.name.isNotBlank())
+            assertTrue(it.id, it.blurb.isNotBlank())
+            assertEquals(it.id, it, Cosmetics.byId(it.id))
+        }
+    }
+
+    /**
+     * L'identifiant sert de clé dans la base ET de branche dans le `when` du dessin. Une
+     * majuscule ou un espace passerait l'un et raterait l'autre en silence : la pièce
+     * serait gagnée, rangée dans le casier, et le dragon apparaîtrait tout nu.
+     */
+    @Test fun `les identifiants tiennent dans la convention`() {
+        Cosmetics.ALL.forEach {
+            assertTrue(it.id, it.id.matches(Regex("[a-z][a-z0-9_]*")))
+        }
+    }
+
+    /** Chaque emplacement a de quoi être porté : un casier avec un onglet vide est un bogue. */
+    @Test fun `aucun emplacement n est vide`() {
+        Slot.entries.forEach { slot ->
+            assertTrue(slot.name, Cosmetics.ALL.any { it.slot == slot })
+        }
+    }
+
     /** `nextLocked` suit l'ordre de la liste, et rend null une fois tout gagné. */
     @Test fun `la prochaine piece suit l ordre du catalogue`() {
         assertEquals(Cosmetics.ALL[0].id, Cosmetics.nextLocked(emptySet())?.id)
