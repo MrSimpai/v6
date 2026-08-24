@@ -111,24 +111,52 @@ class WorldTest {
         }
     }
 
-    /** Le tirage est STABLE : deux lectures du même jour donnent le même endroit. */
-    @Test fun `le meme jour donne le meme endroit`() {
-        val matin = Sky.moment(at(2026, 8, 21) - 6 * 3_600_000L)
-        val soir = Sky.moment(at(2026, 8, 21) + 6 * 3_600_000L)
-        val a = worldOf(matin)
-        val b = worldOf(soir)
-        assertEquals(a.land, b.land)
-        assertEquals(a.ridges, b.ridges)
-        assertEquals(a.river, b.river, 0.0001f)
-        assertEquals(a.house, b.house)
+    /**
+     * Le tirage est STABLE : le décor ne change pas sous les pieds pendant la journée.
+     *
+     * C'est la propriété qui rend tout le reste crédible. Si le lieu était retiré à
+     * chaque lecture, la forêt du matin serait un champ de maïs à midi et le chevreuil
+     * qu'on a croisé n'aurait jamais existé — or c'est exactement ce qu'on promet en
+     * disant « le décor du jour ».
+     *
+     * La journée est délimitée par `Sky.dayIndex`, PAS par le calendrier du test. Une
+     * première version fabriquait deux instants à 8 h et 20 h heure de Laval et affirmait
+     * qu'ils tombaient le même jour ; sur le runner, réglé sur UTC, 20 h à Laval est
+     * minuit passé, donc `dayIndex` avait raison de rendre deux journées différentes et
+     * c'est l'affirmation du test qui était fausse. Le code sous test décide où commence
+     * une journée ; un test qui en décide autrement de son côté ne mesure que l'écart
+     * entre les deux.
+     */
+    @Test fun `le decor ne bouge pas de la journee`() {
+        val base = at(2026, 8, 21)
+        val jour = Sky.moment(base)
+        val attendu = worldOf(jour)
+        var heures = 0
+
+        (-11..11).forEach { h ->
+            val m = Sky.moment(base + h * 3_600_000L)
+            if (m.day != jour.day) return@forEach
+            heures++
+            val w = worldOf(m)
+            assertEquals("à ${h}h du midi", attendu.land, w.land)
+            assertEquals("à ${h}h du midi", attendu.ridges, w.ridges)
+            assertEquals("à ${h}h du midi", attendu.river, w.river, 0.0001f)
+            assertEquals("à ${h}h du midi", attendu.house, w.house)
+            assertEquals("à ${h}h du midi", attendu.hive, w.hive)
+        }
+        // Sans ce garde-fou, un `dayIndex` qui changerait à chaque heure ferait passer
+        // le test avec une seule lecture comparée à elle-même.
+        assertTrue("seulement $heures h dans la journée", heures >= 12)
     }
 
-    /** La ruche ne passe pas l'hiver : les abeilles sont en grappe dans la ruche. */
+    /** La ruche ne passe pas l'hiver : les abeilles sont en grappe à l'intérieur. */
     @Test fun `pas de ruche en hiver`() {
+        var hivers = 0
         year().forEach { m ->
-            if (m.season == Sky.Season.WINTER) {
-                assertFalse("jour ${m.day}", worldOf(m).hive)
-            }
+            if (m.season != Sky.Season.WINTER) return@forEach
+            hivers++
+            assertFalse("jour ${m.day}", worldOf(m).hive)
         }
+        assertTrue("aucun jour d'hiver dans l'année", hivers > 40)
     }
 }
