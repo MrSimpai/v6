@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.medtap.Her
 import com.example.medtap.data.DayWindow
+import com.example.medtap.data.Slots
 import com.example.medtap.data.Medication
 import com.example.medtap.data.Week
 import com.example.medtap.data.uniformWeek
@@ -210,7 +211,7 @@ fun AddMedicationScreen(
                     // le rappel de 9h à 7h laisserait une plage qui se referme avant de
                     // s'ouvrir, donc silencieusement aucune plage du tout.
                     val shift = s - edited.startMinute
-                    val e = if (edited.instant) s else (edited.endMinute + shift).coerceIn(s, 1439)
+                    val e = if (edited.instant) s else (edited.endMinute + shift).coerceIn(s, Slots.LATEST_END_MINUTE)
                     set(DayWindow(s, e))
                 }
             )
@@ -218,10 +219,16 @@ fun AddMedicationScreen(
             Spacer(Modifier.height(8.dp))
             TimeRow(
                 label = "Sans presser jusqu'à",
-                value = if (edited.instant) "—" else hhmm(edited.endMinute),
+                value = when {
+                    edited.instant -> "—"
+                    // Passé minuit : on le dit, sinon « 1h00 » se lit comme une heure du matin
+                    // AVANT le rappel.
+                    edited.endMinute >= 1440 -> "${hhmm(edited.endMinute)} 🌙"
+                    else -> hhmm(edited.endMinute)
+                },
                 onChange = { delta ->
                     val base = if (edited.instant) edited.startMinute else edited.endMinute
-                    val e = (base + delta).coerceIn(edited.startMinute, 1439)
+                    val e = (base + delta).coerceIn(edited.startMinute, Slots.LATEST_END_MINUTE)
                     set(DayWindow(edited.startMinute, e))
                 }
             )
@@ -288,9 +295,14 @@ fun AddMedicationScreen(
     }
 }
 
-/** « 7h00 », à partir de minutes depuis minuit. */
-private fun hhmm(minuteOfDay: Int): String =
-    String.format(Locale.CANADA_FRENCH, "%dh%02d", minuteOfDay / 60, minuteOfDay % 60)
+/**
+ * « 7h00 », à partir de minutes depuis minuit. Une fin de plage qui passe minuit (jusqu'à
+ * 3h) s'écrit à l'heure de l'horloge, « 1h30 », et non « 25h30 ».
+ */
+private fun hhmm(minuteOfDay: Int): String {
+    val m = minuteOfDay % 1440
+    return String.format(Locale.CANADA_FRENCH, "%dh%02d", m / 60, m % 60)
+}
 
 /**
  * « 7h », ou « 7h30 quand il le faut ».
@@ -300,7 +312,7 @@ private fun hhmm(minuteOfDay: Int): String =
  * deux zéros.
  */
 private fun compact(minuteOfDay: Int): String =
-    if (minuteOfDay % 60 == 0) "${minuteOfDay / 60}h" else hhmm(minuteOfDay)
+    if (minuteOfDay % 60 == 0) "${(minuteOfDay % 1440) / 60}h" else hhmm(minuteOfDay)
 
 /** Reste dans la journée : une heure du rappel ne déborde jamais sur la veille. */
 private fun wrap(minuteOfDay: Int): Int = ((minuteOfDay % 1440) + 1440) % 1440

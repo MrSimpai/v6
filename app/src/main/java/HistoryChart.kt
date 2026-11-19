@@ -6,16 +6,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.medtap.data.DayWindow
 import com.example.medtap.data.DoseLog
 import com.example.medtap.data.Medication
@@ -68,157 +73,220 @@ fun buildDays(med: Medication, logs: List<DoseLog>, days: Int = 14): List<DayPoi
     }.filter { Slots.dayOf(it.slot) >= born }
 }
 
-/** L'heure murale d'une prise, en minutes depuis minuit. */
-private fun minuteOfDay(millis: Long): Int = Calendar.getInstance().apply {
-    timeInMillis = millis
-}.let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
+/**
+ * L'heure d'une prise, en minutes depuis le minuit de SA journée.
+ *
+ * La journée se referme à 3h du matin : une pilule d'hier prise à 1h30 vaut donc
+ * 25 h 30 et se pose sous la plage d'hier soir, au lieu de remonter tout en haut du
+ * graphique comme si elle avait été prise à l'aube.
+ */
+private fun minuteOfDay(log: DoseLog): Int {
+    val c = Calendar.getInstance().apply { timeInMillis = log.takenAt }
+    val m = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
+    return if (Slots.dayOf(log.takenAt) > Slots.dayOf(log.scheduledFor)) m + 24 * 60 else m
+}
 
-/** « 6 h » ou « 6 h 30 » — l'heure ronde se lit mieux sans ses deux zéros. */
+/** « 6h » ou « 6h30 » — l'heure ronde se lit mieux sans ses deux zéros. */
 private fun clockLabel(minuteOfDay: Int): String {
-    val h = minuteOfDay / 60
-    val m = minuteOfDay % 60
+    val wrapped = minuteOfDay % (24 * 60)
+    val h = wrapped / 60
+    val m = wrapped % 60
     return if (m == 0) "${h}h" else String.format(Locale.CANADA_FRENCH, "%dh%02d", h, m)
 }
 
+/** La dernière minute où la dose est encore « à l'heure » ce jour-là. */
+private fun DayWindow.limit(): Int = if (instant) startMinute else endMinute
+
 /** Combien de marge on laisse de part et d'autre de la plage. */
-private const val MARGIN_MIN = 120
+private const val MARGIN_MIN = 60
+
+/** Combien de jours le graphique montre. Une semaine se lit d'un coup d'œil ; deux, non. */
+private const val CHART_DAYS = 7
 
 /**
- * À quelle heure la dose a été prise, jour après jour, contre la plage prévue.
+ * À quelle heure la dose a été prise, ces sept derniers jours.
  *
- * L'axe couvre la PLAGE plus deux heures de chaque côté. Une pilule réglée de 6 h à 8 h
- * donne donc un graphique de 4 h à 10 h. Avant, l'axe était un écart au créneau, figé à
- * plus ou moins deux heures autour d'un point : la plage n'y apparaissait nulle part, et
- * une prise à 8 h — parfaitement dans les clous — se lisait « deux heures de retard ».
+ * Pensé pour se lire en une seconde, sans axe à déchiffrer :
+ *  - une phrase en haut dit l'essentiel (« 6 sur 7 à l'heure », « en moyenne vers 8h15 ») ;
+ *  - chaque jour est une colonne arrondie, avec la plage « à l'heure » peinte en vert ;
+ *  - la prise est une grosse pastille — verte dans la plage, abricot en retard — avec
+ *    l'heure écrite juste au-dessus, donc on n'a jamais à la deviner ;
+ *  - un oubli est un petit rond pointillé au bas de la colonne ;
+ *  - aujourd'hui a sa lettre dans une pastille framboise.
  *
- * Un graphique en barres du nombre de doses ne dirait que « oui / non ». Celui-ci montre
- * la dérive, qui annonce l'oubli avant qu'il arrive.
+ * Plus tard dans la journée = plus bas, comme une horloge qu'on lit de haut en bas.
  */
 @Composable
-fun DoseChart(points: List<DayPoint>, modifier: Modifier = Modifier) {
+fun DoseChart(allPoints: List<DayPoint>, modifier: Modifier = Modifier) {
     val tm = rememberTextMeasurer()
+    val points = allPoints.takeLast(CHART_DAYS)
     if (points.isEmpty()) return
 
-    // Les bornes viennent des plages réellement affichées, pas d'aujourd'hui : sur un
-    // horaire réglé jour par jour, l'axe doit contenir la semaine entière.
-    var lo = points.minOf { it.window.startMinute } - MARGIN_MIN
-    var hi = points.maxOf { if (it.window.instant) it.window.startMinute else it.window.endMinute } +
-        MARGIN_MIN
+    val taken = points.mapNotNull { p -> p.log?.let { minuteOfDay(it) to p.window } }
+    val onTime = taken.count { (m, w) -> m <= w.limit() }
 
-    // Une prise très hors plage étire l'axe plutôt que d'être écrasée sur le bord. Un point
-    // collé à la bordure prétendrait une heure qui n'est pas la sienne.
-    points.mapNotNull { it.log }.forEach {
-        val m = minuteOfDay(it.takenAt)
-        if (m < lo) lo = m
-        if (m > hi) hi = m
-    }
-    lo = lo.coerceAtLeast(0)
-    hi = hi.coerceAtMost(24 * 60)
+    // Les bornes viennent des plages réellement affichées, pas d'aujourd'hui : sur un
+    // horaire réglé jour par jour, l'axe doit contenir la semaine entière. Une prise très
+    // hors plage étire l'axe plutôt que d'être écrasée sur le bord.
+    val lo = (minOf(points.minOf { it.window.startMinute }, taken.minOfOrNull { it.first } ?: Int.MAX_VALUE) -
+        MARGIN_MIN).coerceAtLeast(0)
+    val hi = (maxOf(points.maxOf { it.window.limit() }, taken.maxOfOrNull { it.first } ?: 0) +
+        MARGIN_MIN).coerceAtMost(Slots.LATEST_END_MINUTE)
 
     Column(modifier) {
-        Row(
-            Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("QUAND TU L'AS PRIS", style = Type.Label, color = Pal.Muted)
+        Text("QUAND TU L'AS PRISE", style = Type.Label, color = Pal.Muted)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            when {
+                taken.isEmpty() -> "Pas encore de prise cette semaine 🌱"
+                onTime == taken.size -> "Toujours à l'heure! 🎯"
+                else -> "$onTime sur ${taken.size} à l'heure"
+            },
+            style = Type.Title, color = Pal.Ink
+        )
+        if (taken.isNotEmpty()) {
             Text(
-                points.last().window.let {
-                    if (it.instant) clockLabel(it.startMinute)
-                    else "${clockLabel(it.startMinute)} – ${clockLabel(it.endMinute)}"
-                },
-                style = Type.Label, color = Pal.Iris
+                "En moyenne vers ${clockLabel(taken.map { it.first }.average().toInt())}",
+                style = Type.Body, color = Pal.Muted
             )
         }
-        Spacer(Modifier.height(14.dp))
-        Canvas(Modifier.fillMaxWidth().height(190.dp)) {
+        Spacer(Modifier.height(16.dp))
+        Canvas(Modifier.fillMaxWidth().height(236.dp)) {
             plot(points, lo, hi, tm)
         }
+        Spacer(Modifier.height(10.dp))
+        Legend()
     }
 }
 
+@Composable
+private fun Legend() {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LegendDot(Pal.Mint, "à l'heure")
+        Spacer(Modifier.width(16.dp))
+        LegendDot(Pal.Apricot, "en retard")
+        Spacer(Modifier.width(16.dp))
+        LegendDot(Pal.Muted.copy(alpha = 0.5f), "oubliée", hollow = true)
+    }
+}
+
+@Composable
+private fun LegendDot(color: Color, label: String, hollow: Boolean = false) {
+    Canvas(Modifier.size(10.dp)) {
+        if (hollow) drawCircle(color, size.minDimension / 2f - 1.5f, style = Stroke(width = 3f))
+        else drawCircle(color)
+    }
+    Spacer(Modifier.width(5.dp))
+    Text(label, style = Type.Label.copy(letterSpacing = 0.sp), color = Pal.Muted)
+}
+
 private fun DrawScope.plot(points: List<DayPoint>, lo: Int, hi: Int, tm: TextMeasurer) {
-    val padL = 46f
-    val padB = 30f
-    val padT = 10f
-    val w = size.width - padL
-    val h = size.height - padB
+    val dayRow = 30.dp.toPx()            // la rangée des lettres, en bas
+    val labelRoom = 32.dp.toPx()         // l'heure écrite au-dessus de la pastille du haut
+    val top = labelRoom
+    val bottom = size.height - dayRow
     val span = (hi - lo).coerceAtLeast(1).toFloat()
-    val stepX = w / points.size
+    val stepX = size.width / points.size
+    val trackW = (stepX * 0.56f).coerceAtMost(30.dp.toPx())
+    val dotR = (trackW / 2f).coerceAtMost(12.dp.toPx())
+    val corner = CornerRadius(trackW / 2f, trackW / 2f)
+    val todayStart = Slots.dayOf(System.currentTimeMillis())
 
-    fun x(i: Int) = padL + stepX * (i + 0.5f)
-    // Plus tard dans la journée = plus bas à l'écran, comme une horloge qu'on lit de haut
-    // en bas.
-    fun y(minute: Int) =
-        padT + ((minute.coerceIn(lo, hi) - lo) / span) * (h - padT)
+    fun x(i: Int) = stepX * (i + 0.5f)
+    fun y(minute: Int) = top + ((minute.coerceIn(lo, hi) - lo) / span) * (bottom - top)
 
-    // La plage, colonne par colonne : c'est la zone où la dose est « à l'heure ». Une
-    // bande par jour plutôt qu'un bandeau continu, parce que l'horaire peut changer d'un
-    // jour à l'autre — et alors la bande le montre au lieu de le cacher.
-    points.forEachIndexed { i, p ->
-        val top = y(p.window.startMinute)
-        val bottom = if (p.window.instant) top + 2f else y(p.window.endMinute)
-        drawRoundRect(
-            color = Pal.IrisSoft,
-            topLeft = Offset(x(i) - stepX * 0.34f, top),
-            size = Size(stepX * 0.68f, (bottom - top).coerceAtLeast(2f)),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(5f, 5f)
-        )
-    }
-
-    // Les repères : le début et la fin de la plage, puis les deux bornes de l'axe.
-    val ref = points.last().window
-    val guides = buildList {
-        add(ref.startMinute to true)
-        if (!ref.instant) add(ref.endMinute to true)
-        add(lo to false)
-        add(hi to false)
-    }.distinctBy { it.first }
-
-    guides.forEach { (minute, isEdge) ->
-        val yy = y(minute)
-        drawLine(
-            color = if (isEdge) Pal.Iris.copy(alpha = 0.45f) else Pal.IrisSoft,
-            start = Offset(padL, yy), end = Offset(size.width, yy),
-            strokeWidth = if (isEdge) 2f else 1f,
-            pathEffect = if (isEdge) PathEffect.dashPathEffect(floatArrayOf(8f, 8f)) else null
-        )
-        val txt = tm.measure(
-            clockLabel(minute),
-            Type.Label.copy(color = if (isEdge) Pal.Iris else Pal.Muted)
-        )
-        drawText(txt, topLeft = Offset(0f, yy - txt.size.height / 2f))
-    }
-
-    // La ligne qui relie les prises : c'est elle qui rend la dérive visible.
-    val taken = points.mapIndexedNotNull { i, p -> p.log?.let { i to minuteOfDay(it.takenAt) } }
-    taken.zipWithNext { (i1, m1), (i2, m2) ->
-        drawLine(
-            Pal.Mint.copy(alpha = 0.55f), Offset(x(i1), y(m1)), Offset(x(i2), y(m2)),
-            strokeWidth = 2.5f, cap = StrokeCap.Round
-        )
-    }
+    val timeStyle = Type.Label.copy(letterSpacing = 0.sp, fontSize = 11.sp)
 
     points.forEachIndexed { i, p ->
         val cx = x(i)
-        if (p.log != null) {
-            val m = minuteOfDay(p.log.takenAt)
-            // « En retard » se juge par rapport à la FIN de la plage, pas à son début :
-            // c'est tout l'intérêt d'avoir une plage.
-            val limit = if (p.window.instant) p.window.startMinute else p.window.endMinute
-            val late = m > limit || m < p.window.startMinute - MARGIN_MIN
-            drawCircle(if (late) Pal.Butter else Pal.Mint, 7f, Offset(cx, y(m)))
-            drawCircle(Pal.Card, 3f, Offset(cx, y(m)))
+
+        // La colonne du jour, toute douce.
+        drawRoundRect(
+            color = Pal.IrisSoft.copy(alpha = 0.55f),
+            topLeft = Offset(cx - trackW / 2f, top),
+            size = Size(trackW, bottom - top),
+            cornerRadius = corner
+        )
+
+        // La plage « à l'heure », en vert menthe. Une bande par jour plutôt qu'un bandeau
+        // continu : si l'horaire change d'un jour à l'autre, la bande le montre.
+        val wTop = y(p.window.startMinute)
+        val wBottom = y(p.window.limit())
+        drawRoundRect(
+            color = Pal.MintSoft,
+            topLeft = Offset(cx - trackW / 2f, wTop - dotR / 2f),
+            size = Size(trackW, (wBottom - wTop) + dotR),
+            cornerRadius = corner
+        )
+
+        val log = p.log
+        if (log != null) {
+            val m = minuteOfDay(log)
+            val late = m > p.window.limit()
+            val color = if (late) Pal.Apricot else Pal.Mint
+            val cy = y(m)
+            // Une petite ombre pour l'effet « bouton » des pastilles.
+            drawCircle(color.copy(alpha = 0.25f), dotR + 3.dp.toPx(), Offset(cx, cy + 2.dp.toPx()))
+            drawCircle(color, dotR, Offset(cx, cy))
+            drawCheck(Offset(cx, cy), dotR * 0.5f)
+
+            val txt = tm.measure(clockLabel(m), timeStyle.copy(color = if (late) Pal.Apricot else Pal.Mint))
+            drawText(
+                txt,
+                topLeft = Offset(
+                    (cx - txt.size.width / 2f).coerceIn(0f, maxOf(0f, size.width - txt.size.width)),
+                    cy - dotR - txt.size.height - 2.dp.toPx()
+                )
+            )
         } else {
-            // Un oubli se pose en anneau creux au début de la plage : un trou dans la
-            // courbe doit être impossible à survoler sans le voir.
+            // Un oubli : un petit rond pointillé tout en bas, discret mais impossible à
+            // confondre avec une prise.
             drawCircle(
-                Pal.Apricot.copy(alpha = 0.8f), 6f, Offset(cx, y(p.window.startMinute)),
-                style = Stroke(width = 2f)
+                Pal.Muted.copy(alpha = 0.45f), dotR * 0.7f,
+                Offset(cx, bottom - dotR),
+                style = Stroke(
+                    width = 2.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
+                )
             )
         }
-        val lbl = tm.measure(p.label, Type.Label.copy(color = Pal.Muted))
-        drawText(lbl, topLeft = Offset(cx - lbl.size.width / 2f, h + 8f))
+
+        // La lettre du jour. Aujourd'hui dans une pastille framboise, comme chez le hibou.
+        val isToday = Slots.dayOf(p.slot) == todayStart
+        val lbl = tm.measure(
+            p.label,
+            Type.Label.copy(letterSpacing = 0.sp, color = if (isToday) Color.White else Pal.Muted)
+        )
+        val ly = bottom + (dayRow - lbl.size.height) / 2f + 2.dp.toPx()
+        if (isToday) {
+            val pad = 7.dp.toPx()
+            val w = maxOf(lbl.size.width + pad * 2, lbl.size.height + pad)
+            drawRoundRect(
+                Pal.Iris,
+                topLeft = Offset(cx - w / 2f, ly - pad / 2f),
+                size = Size(w, lbl.size.height + pad),
+                cornerRadius = CornerRadius(w, w)
+            )
+        }
+        drawText(lbl, topLeft = Offset(cx - lbl.size.width / 2f, ly))
     }
+}
+
+/** Le petit crochet blanc dans la pastille. */
+private fun DrawScope.drawCheck(c: Offset, r: Float) {
+    val path = Path().apply {
+        moveTo(c.x - r * 0.75f, c.y + r * 0.05f)
+        lineTo(c.x - r * 0.2f, c.y + r * 0.6f)
+        lineTo(c.x + r * 0.8f, c.y - r * 0.55f)
+    }
+    drawPath(
+        path, Color.White,
+        style = Stroke(width = r * 0.45f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    )
 }
 
 /** Compact streak strip: one rounded tick per day, filled when the dose was logged. */

@@ -214,4 +214,44 @@ class StreakTest {
         assertEquals(DayState.TODAY, week[3])       // jeudi 5
         assertEquals(DayState.FUTURE, week[6])      // dimanche
     }
+
+    // ---- la série posée à la main --------------------------------------------
+
+    /** Le chiffre choisi est exactement celui qui s'affiche, tout de suite. */
+    @Test fun `la serie posee a la main s affiche telle quelle`() = runBlocking {
+        val med = T.med(hour = 9, createdAt = T.at(2025, 6, 1))
+        val dao = TestDao(mutableListOf(med))
+        val now = T.at(2025, 6, 5, 10, 0)
+        dao.overrideStreak(120, now)
+        assertEquals(120, dao.currentStreak(listOf(med), now))
+    }
+
+    /** Puis elle continue de compter : une journée complète de plus, c'est un de plus. */
+    @Test fun `la serie posee a la main continue de compter`() = runBlocking {
+        val med = T.med(hour = 9, createdAt = T.at(2025, 6, 1))
+        val dao = TestDao(mutableListOf(med))
+        dao.overrideStreak(120, T.at(2025, 6, 5, 8, 0))
+        dao.insert(T.dose(med, 2025, 6, 5))
+        assertEquals(121, dao.currentStreak(listOf(med), T.at(2025, 6, 5, 20, 0)))
+        dao.insert(T.dose(med, 2025, 6, 6))
+        assertEquals(122, dao.currentStreak(listOf(med), T.at(2025, 6, 6, 20, 0)))
+    }
+
+    /** Et un vrai oubli après le réglage la remet à zéro, comme d'habitude. */
+    @Test fun `un oubli apres le reglage remet la serie a zero`() = runBlocking {
+        val med = T.med(hour = 9, createdAt = T.at(2025, 6, 1))
+        val dao = TestDao(mutableListOf(med))
+        dao.overrideStreak(120, T.at(2025, 6, 5, 8, 0))
+        assertEquals(0, dao.currentStreak(listOf(med), T.at(2025, 6, 7, 10, 0)))
+    }
+
+    /** Entre minuit et 3h, hier attend encore sa dose : la série ne tombe pas à zéro. */
+    @Test fun `la serie tient entre minuit et 3h`() = runBlocking {
+        val med = T.med(hour = 9, createdAt = T.at(2025, 6, 1))
+        val dao = TestDao(mutableListOf(med), mutableListOf(
+            T.dose(med, 2025, 6, 1), T.dose(med, 2025, 6, 2)
+        ))
+        assertEquals(2, dao.currentStreak(listOf(med), T.at(2025, 6, 4, 1, 0)))
+        assertEquals(0, dao.currentStreak(listOf(med), T.at(2025, 6, 4, 3, 0)))
+    }
 }

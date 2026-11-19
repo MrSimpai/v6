@@ -69,6 +69,10 @@ class TestDao(
     }
     override suspend fun allFreezes(): List<StreakFreeze> = freezes.toList()
 
+    var seed: StreakSeed? = null
+    override suspend fun streakSeed(): StreakSeed? = seed
+    override suspend fun setStreakSeed(s: StreakSeed) { seed = s }
+
     override fun activeMeds(): Flow<List<Medication>> = flowOf(meds.filter { it.active })
     override fun logsSince(since: Long): Flow<List<DoseLog>> = flowOf(logs.toList())
     override fun cosmetics(): Flow<List<OwnedCosmetic>> = flowOf(emptyList())

@@ -733,6 +733,20 @@ you actually want it.
 The widget keeps showing the real outfit throughout, since it reads the database. The
 try-on only exists inside the app, which is the only place the countdown is visible.
 
+The same word also reveals **a secret streak setting** under the Atelier du ciel button:
+big − / + buttons and a number field. It never invents doses; it stores one row
+(`StreakSeed`, schema **version 7**) saying "as of this day, the streak was N". From then on
+the count continues by itself — each complete day adds one — and a real miss after that day
+resets it as usual.
+
+## The day ends at 3 AM
+
+A dose can be logged for *yesterday* until 3:00 the next morning, whatever time the pill is
+set for (`Slots.DAY_ENDS_AT_HOUR`). The "sans presser jusqu'à" end of a window can also be set
+past midnight, up to 3:00 (shown with a 🌙). Between midnight and 3 AM the streak keeps
+yesterday's count instead of dropping, no freeze is spent on a day that isn't over yet, and
+the reminder for yesterday's dose stays alive until 3 AM instead of being cleared at midnight.
+
 **The dragon is pinned to the top, and shrinks rather than leaving.** The whole page used
 to scroll as one block, so the moment you reached the pieces, the only thing that matters —
 what it actually looks like on her — slid off the top. You'd dress her blind, scroll up to
