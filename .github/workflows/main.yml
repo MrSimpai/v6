@@ -23,6 +23,10 @@ jobs:
           java-version: '17'
 
       - uses: android-actions/setup-android@v3
+        # Le paquet « tools » par défaut n'existe plus dans le sdkmanager récent des
+        # runners : on ne demande que ce dont le build a besoin.
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - uses: gradle/actions/setup-gradle@v4
         with:
