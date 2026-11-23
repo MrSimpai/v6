@@ -39,6 +39,10 @@ fun LockerScreen(
     /** Rend vrai si le mot était le bon — c'est le seul retour que le champ obtient. */
     onCode: (String) -> Boolean,
     onOpenSkyLab: () -> Unit = {},
+    /** La série affichée en ce moment, pour que le réglage caché parte de là. */
+    streak: Int = 0,
+    /** Pose la série à la valeur choisie. Visible seulement après le mot. */
+    onSetStreak: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val previewing = previewUntil != null
@@ -164,6 +168,8 @@ fun LockerScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)
                     )
                 }
+                Spacer(Modifier.height(10.dp))
+                StreakEditor(streak, onSetStreak)
             }
         }
     }
@@ -303,6 +309,80 @@ private fun CosmeticRow(
                 style = Type.Label,
                 color = if (equipped) Pal.Iris else Pal.Muted
             )
+        }
+    }
+}
+
+/**
+ * Le réglage secret de la série, qui n'existe qu'après « Je t'aime ».
+ *
+ * Deux façons d'y arriver : les gros boutons − / + pour ajuster de quelques jours, ou
+ * taper le chiffre exact. Rien ne change tant qu'on n'a pas appuyé sur « C'est ça! » :
+ * un réglage qui s'applique pendant qu'on tape ferait passer la série par 1, 12 et 120
+ * avant d'arriver à 1200.
+ */
+@Composable
+private fun StreakEditor(current: Int, onSet: (Int) -> Unit) {
+    var draft by remember(current) { mutableStateOf(current.toString()) }
+    var saved by remember { mutableStateOf(false) }
+    val value = draft.toIntOrNull()?.coerceIn(0, 99_999)
+
+    Surface(color = Pal.Card, shape = Soft) {
+        Column(
+            Modifier.fillMaxWidth().padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("TA SÉRIE, EN SECRET 🤫", style = Type.Label, color = Pal.Muted)
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RoundStep("−") {
+                    draft = ((value ?: current) - 1).coerceAtLeast(0).toString(); saved = false
+                }
+                Spacer(Modifier.width(14.dp))
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { t ->
+                        draft = t.filter { it.isDigit() }.take(5); saved = false
+                    },
+                    singleLine = true,
+                    textStyle = Type.Display.copy(color = Pal.Apricot, textAlign = TextAlign.Center),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    ),
+                    modifier = Modifier.width(130.dp)
+                )
+                Spacer(Modifier.width(14.dp))
+                RoundStep("+") {
+                    draft = ((value ?: current) + 1).coerceAtMost(99_999).toString(); saved = false
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("🔥 jours", style = Type.Title, color = Pal.Apricot)
+            Spacer(Modifier.height(14.dp))
+            Button(
+                onClick = { value?.let { onSet(it); saved = true } },
+                enabled = value != null,
+                shape = Pill,
+                colors = ButtonDefaults.buttonColors(containerColor = Pal.Mint),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) { Text(if (saved) "C'est fait 💗" else "C'est ça!", style = Type.Title) }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "La série repart de ce chiffre et continue de compter toute seule.",
+                style = Type.Label, color = Pal.Muted, textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoundStep(label: String, onClick: () -> Unit) {
+    Surface(
+        color = Pal.IrisSoft, shape = Pill,
+        modifier = Modifier.size(52.dp).clip(Pill).clickable { onClick() }
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(label, style = Type.Display, color = Pal.Iris)
         }
     }
 }

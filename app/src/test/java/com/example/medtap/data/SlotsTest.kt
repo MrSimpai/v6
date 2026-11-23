@@ -39,13 +39,29 @@ class SlotsTest {
     }
 
     /**
-     * Mais pas indéfiniment. Une pilule de 9h « prise » le lendemain à 1h du matin est une
-     * journée manquée qu'on maquillerait, pas une dose du soir notée en retard.
+     * La journée se referme à 3h du matin, quelle que soit l'heure de la pilule : à 2h59
+     * la dose d'hier se note encore, même une pilule du matin.
      */
-    @Test fun `une dose du matin ne se rattrape pas la nuit suivante`() {
+    @Test fun `la dose d hier se note jusqu a 3h du matin`() {
         val med = T.med(hour = 9)
-        val slots = Slots.loggableSlots(med, T.at(2025, 6, 3, 1, 0))
-        assertTrue(slots.isEmpty())
+        assertEquals(
+            listOf(T.at(2025, 6, 2, 9, 0)),
+            Slots.loggableSlots(med, T.at(2025, 6, 3, 2, 59))
+        )
+    }
+
+    /** Mais à 3h pile, hier est terminé : ce qui n'est pas noté est manqué. */
+    @Test fun `a 3h la journee d hier est fermee`() {
+        assertTrue(Slots.loggableSlots(T.med(hour = 9), T.at(2025, 6, 3, 3, 0)).isEmpty())
+        assertTrue(Slots.loggableSlots(T.med(hour = 23), T.at(2025, 6, 3, 3, 30)).isEmpty())
+    }
+
+    /** Une plage peut se refermer après minuit, jusqu'à 3h du matin. */
+    @Test fun `une plage peut finir a 3h du matin`() {
+        val end = Slots.LATEST_END_MINUTE
+        val med = T.med(hour = 21, schedule = List(7) { "${21 * 60}-$end" }.joinToString(","))
+        val slot = T.at(2025, 6, 2, 21, 0)
+        assertEquals(T.at(2025, 6, 3, 3, 0), Slots.windowEnd(med, slot))
     }
 
     /**

@@ -296,6 +296,16 @@ object Dragon {
             "ailes_monarque"   -> butterflyWing(c)
             "ailes_coccinelle" -> ladybugWing(c)
             "ailes_etoilees"   -> starryWing(c)
+            "ailes_coeur"      -> heartWing(c)
+            "ailes_nuage"      -> cloudWing(c)
+            "ailes_bonbon"     -> candyWing(c)
+            "ailes_morpho"     -> morphoWing(c)
+            "ailes_dorees"     -> goldWing(c)
+            "ailes_aurore"     -> auroraWing(c)
+            "ailes_vitrail"    -> stainedWing(c)
+            "ailes_sirene"     -> mermaidWing(c)
+            "ailes_automne"    -> autumnWing(c)
+            "ailes_abeille"    -> beeWing(c)
             else -> { c.drawPath(batPath(), fill(WingMem)); batBones(c, PinkDark) }
         }
         c.restore()
@@ -686,7 +696,7 @@ object Dragon {
                     c.drawLine(82f, 196f, 70f, 197f, whisker)
                 }
 
-                else -> c.drawPath(foot, fill(Fluff))
+                else -> if (!legMore(c, wear, foot)) c.drawPath(foot, fill(Fluff))
             }
         }
     }
@@ -754,6 +764,16 @@ object Dragon {
             "baleine" -> baleine(c)
             "licorne_peluche" -> licornePeluche(c)
             "pingouin" -> pingouin(c)
+            "lapin" -> lapin(c)
+            "renard" -> renard(c)
+            "panda" -> panda(c)
+            "poussin" -> poussin(c)
+            "souris" -> souris(c)
+            "mouton" -> mouton(c)
+            "pieuvre" -> pieuvre(c)
+            "dino" -> dino(c)
+            "abeille" -> abeille(c)
+            "raton" -> raton(c)
         }
         c.restore()
     }
@@ -1225,7 +1245,9 @@ object Dragon {
                     c.drawOval(oval(110f, 166f, 26f, 31f), fill(Belly))
                 }
 
-                else -> c.drawOval(oval(110f, 166f, 26f, 31f), fill(Belly))
+                else -> if (!torsoMore(c, wear, all)) {
+                    c.drawOval(oval(110f, 166f, 26f, 31f), fill(Belly))
+                }
             }
             c.restore()
 
@@ -1318,6 +1340,16 @@ object Dragon {
             "noeud" -> bigBow(c)
             "cache_oreilles" -> earmuffs(c)
             "licorne" -> unicornHorn(c)
+            "beret" -> beret(c)
+            "fraise" -> strawberryHat(c)
+            "diademe" -> tiara(c)
+            "haut_de_forme" -> topHat(c)
+            "antennes" -> beeAntennae(c)
+            "lunettes_coeur" -> heartGlasses(c)
+            "bandana" -> bandana(c)
+            "toque_chef" -> chefHat(c)
+            "cowboy" -> cowboyHat(c)
+            "bandeau_sport" -> sportBand(c)
         }
     }
 
@@ -1607,6 +1639,14 @@ object Dragon {
         "impermeable" -> Rain to RainDeep
         "mariniere" -> Wool to Navy
         "doudoune" -> Puffer to PufferD
+        "tshirt_coeur" -> Wool to Fuzz
+        "chandail_arcenciel" -> RAINBOW[4] to RAINBOW[5]
+        "kimono" -> Petal to Bow
+        "veste_jean" -> Denim to DenimD
+        "smoking" -> TopHat to Wool
+        "chandail_fraise" -> Berry to Leaf
+        "sarrau" -> Chef to ChefD
+        "habit_neige" -> Mint2 to Mint2D
         else -> null                       // robe, salopette, maillot, tablier, cape
     }
 
@@ -2013,6 +2053,792 @@ object Dragon {
             quadTo(cx - r * 0.28f, cy - r * 0.28f, cx, cy - r)
             close()
         }.also { c.drawPath(it, fill(color)) }
+    }
+
+    // ---- la troisième fournée --------------------------------------------------
+    //
+    // Cinquante pièces de plus, dix par emplacement. Même règles que les autres : aplats
+    // seulement (pas de Shader, pour que l'ombre chinoise du casier marche), découpées
+    // dans la silhouette du dragon, et chacune lisible dans une vignette de 60 pixels.
+
+    const val Beret    = 0xFFE86F9A.toInt()
+    const val Cowboy   = 0xFFA8703F.toInt()
+    const val CowboyD  = 0xFF7E4E27.toInt()
+    const val Chef     = 0xFFFFFFFF.toInt()
+    const val ChefD    = 0xFFE3E1DC.toInt()
+    const val Pearl    = 0xFFFFF4F8.toInt()
+    const val TopHat   = 0xFF2B2230.toInt()
+    const val Berry    = 0xFFE5394E.toInt()
+    const val BerryD   = 0xFFB82438.toInt()
+    const val Seed     = 0xFFF7E07A.toInt()
+    const val Lavender = 0xFF9A6FD6.toInt()
+    const val LavendD  = 0xFF7349B5.toInt()
+    const val Mint2    = 0xFF57C7B0.toInt()
+    const val Mint2D   = 0xFF2E9C86.toInt()
+    const val Lime     = 0xFF9BD45A.toInt()
+    const val LimeD    = 0xFF6EAA2E.toInt()
+    const val Vest     = 0xFFFF8A2B.toInt()
+    const val Morpho   = 0xFF2F7FE0.toInt()
+    const val MorphoL  = 0xFF7FC4FF.toInt()
+    const val Cloud    = 0xFFFFFFFF.toInt()
+    const val CloudD   = 0xFFC9DCEF.toInt()
+    const val Aurora1  = 0xFF3FD69A.toInt()
+    const val Aurora2  = 0xFF39B7D6.toInt()
+    const val Aurora3  = 0xFF8E5BD6.toInt()
+    const val Maple    = 0xFFD8432B.toInt()
+    const val Fox      = 0xFFEF8A3C.toInt()
+    const val Chick    = 0xFFFFD84D.toInt()
+    const val Mouse    = 0xFFC7C2CE.toInt()
+    const val MouseD   = 0xFF9E97A8.toInt()
+    const val Octo     = 0xFFB07CE0.toInt()
+    const val OctoD    = 0xFF8A55C2.toInt()
+    const val Dino     = 0xFF79C46A.toInt()
+    const val DinoD    = 0xFF4F9C43.toInt()
+    const val Bee      = 0xFFFFCF3A.toInt()
+    const val Coon     = 0xFFA7A3AD.toInt()
+    const val CoonD    = 0xFF5E5966.toInt()
+    const val Panda    = 0xFF2A2830.toInt()
+
+    private val RAINBOW = intArrayOf(
+        0xFFE2564F.toInt(), 0xFFE8913F.toInt(), 0xFFF2D04B.toInt(),
+        0xFF4EBE8A.toInt(), 0xFF2F9FD8.toInt(), 0xFF8E3FBF.toInt()
+    )
+
+    // ---- têtes -----------------------------------------------------------------
+
+    /** Un béret posé de travers, avec sa petite queue. */
+    private fun beret(c: Canvas) {
+        asWear {
+            c.save(); c.rotate(-12f, 110f, 40f)
+            c.drawOval(oval(110f, 40f, 42f, 16f), fill(Beret))
+            c.drawOval(oval(110f, 48f, 36f, 7f), fill(BowD))
+            c.drawLine(110f, 25f, 112f, 15f, stroke(Beret, 4f))
+            c.restore()
+        }
+    }
+
+    /** Une grosse fraise, pépins et collerette de feuilles. */
+    private fun strawberryHat(c: Canvas) {
+        asWear {
+            Path().apply {
+                moveTo(76f, 50f)
+                cubicTo(74f, 22f, 92f, 12f, 110f, 14f)
+                cubicTo(128f, 12f, 146f, 22f, 144f, 50f)
+                close()
+            }.also { c.drawPath(it, fill(Berry)) }
+            listOf(88f to 36f, 102f to 26f, 118f to 26f, 132f to 36f, 96f to 44f, 124f to 44f, 110f to 38f)
+                .forEach { (x, y) -> c.drawOval(oval(x, y, 1.8f, 2.6f), fill(Seed)) }
+            // la collerette, en pointes, posée sur le dessus
+            Path().apply {
+                moveTo(94f, 18f); lineTo(100f, 6f); lineTo(106f, 16f)
+                lineTo(110f, 2f); lineTo(114f, 16f); lineTo(120f, 6f)
+                lineTo(126f, 18f); quadTo(110f, 24f, 94f, 18f); close()
+            }.also { c.drawPath(it, fill(Leaf)) }
+            c.drawRoundRect(RectF(72f, 46f, 148f, 56f), 5f, 5f, fill(BerryD))
+        }
+    }
+
+    /** Une fine bande dorée, une perle et deux pierres. */
+    private fun tiara(c: Canvas) {
+        asWear {
+            Path().apply { moveTo(72f, 54f); quadTo(110f, 26f, 148f, 54f) }
+                .also { c.drawPath(it, stroke(Gold, 7f)) }
+            // trois pointes : une grande au milieu, deux petites de chaque côté
+            Path().apply {
+                moveTo(90f, 42f); lineTo(96f, 22f); lineTo(102f, 36f)
+                lineTo(110f, 4f); lineTo(118f, 36f); lineTo(124f, 22f); lineTo(130f, 42f)
+                quadTo(110f, 32f, 90f, 42f); close()
+            }.also { c.drawPath(it, fill(Gold)) }
+            c.drawCircle(110f, 24f, 7f, fill(Pearl))
+            c.drawCircle(96f, 30f, 3.6f, fill(Teal))
+            c.drawCircle(124f, 30f, 3.6f, fill(Teal))
+            sparkle(c, 110f, 4f, 6f, Wool)
+        }
+    }
+
+    /** Très haut, de travers, ruban rose. */
+    private fun topHat(c: Canvas) {
+        asWear {
+            c.save(); c.rotate(8f, 110f, 48f)
+            c.drawOval(oval(110f, 50f, 40f, 8f), fill(TopHat))
+            c.drawRoundRect(RectF(88f, 4f, 132f, 50f), 5f, 5f, fill(TopHat))
+            c.drawRect(RectF(88f, 36f, 132f, 44f), fill(Bow))
+            c.drawOval(oval(110f, 5f, 22f, 4f), fill(0xFF453A4C.toInt()))
+            c.restore()
+        }
+    }
+
+    /** Serre-tête et deux antennes à ressort, pompons au bout. */
+    private fun beeAntennae(c: Canvas) {
+        asWear {
+            Path().apply { moveTo(76f, 54f); quadTo(110f, 32f, 144f, 54f) }
+                .also { c.drawPath(it, stroke(Ink, 4f)) }
+            listOf(-1f, 1f).forEach { d ->
+                Path().apply {
+                    moveTo(110f + d * 12f, 40f)
+                    quadTo(110f + d * 30f, 26f, 110f + d * 26f, 12f)
+                }.also { c.drawPath(it, stroke(Ink, 3f)) }
+                c.drawCircle(110f + d * 26f, 10f, 7f, fill(Bee))
+                c.drawCircle(110f + d * 24f, 8f, 2.4f, fill(Wool))
+            }
+        }
+    }
+
+    /** Lunettes en cœur, à hauteur des yeux. Tout devient rose. */
+    private fun heartGlasses(c: Canvas) {
+        asWear {
+            heart(c, 89f, 82f, 17f, Bow)
+            heart(c, 131f, 82f, 17f, Bow)
+            heart(c, 89f, 82f, 11f, 0xFFFFA9C8.toInt())
+            heart(c, 131f, 82f, 11f, 0xFFFFA9C8.toInt())
+            c.drawLine(104f, 76f, 116f, 76f, stroke(BowD, 4f))
+            c.drawLine(74f, 74f, 62f, 70f, stroke(BowD, 4f))
+            c.drawLine(146f, 74f, 158f, 70f, stroke(BowD, 4f))
+            c.drawLine(80f, 80f, 86f, 74f, stroke(Wool, 2.2f))
+            c.drawLine(122f, 80f, 128f, 74f, stroke(Wool, 2.2f))
+        }
+    }
+
+    /** Bandana rouge à pois, noué sur le côté. */
+    private fun bandana(c: Canvas) {
+        asWear {
+            val cloth = Path().apply {
+                moveTo(72f, 56f)
+                cubicTo(74f, 22f, 146f, 22f, 148f, 56f)
+                quadTo(110f, 46f, 72f, 56f)
+                close()
+            }
+            c.drawPath(cloth, fill(Xmas))
+            c.save(); c.clipPath(cloth)
+            listOf(86f to 44f, 100f to 32f, 120f to 32f, 134f to 44f, 110f to 44f, 92f to 52f, 128f to 52f)
+                .forEach { (x, y) -> c.drawCircle(x, y, 3f, fill(Wool)) }
+            c.restore()
+            // le nœud, à droite, et ses deux pans
+            c.drawCircle(150f, 54f, 6f, fill(XmasDeep))
+            Path().apply { moveTo(150f, 54f); lineTo(166f, 62f); lineTo(158f, 70f); close() }
+                .also { c.drawPath(it, fill(Xmas)) }
+            Path().apply { moveTo(150f, 54f); lineTo(160f, 76f); lineTo(150f, 78f); close() }
+                .also { c.drawPath(it, fill(Xmas)) }
+        }
+    }
+
+    /** Une toque gonflée comme un soufflé. */
+    private fun chefHat(c: Canvas) {
+        asWear {
+            listOf(Triple(92f, 26f, 15f), Triple(128f, 26f, 15f), Triple(110f, 16f, 18f))
+                .forEach { (x, y, r) -> c.drawCircle(x, y, r, fill(Chef)) }
+            c.drawRect(RectF(84f, 22f, 136f, 48f), fill(Chef))
+            c.drawRoundRect(RectF(82f, 40f, 138f, 56f), 4f, 4f, fill(ChefD))
+            val pleat = stroke(ChefD, 2f)
+            listOf(98f, 110f, 122f).forEach { c.drawLine(it, 24f, it, 40f, pleat) }
+        }
+    }
+
+    /** Bord relevé des deux côtés, calotte pincée, cordon. */
+    private fun cowboyHat(c: Canvas) {
+        asWear {
+            Path().apply {
+                moveTo(46f, 32f)
+                quadTo(56f, 62f, 110f, 60f)
+                quadTo(164f, 62f, 174f, 32f)
+                quadTo(160f, 48f, 110f, 46f)
+                quadTo(60f, 48f, 46f, 32f)
+                close()
+            }.also { c.drawPath(it, fill(CowboyD)) }
+            Path().apply {
+                moveTo(84f, 50f)
+                cubicTo(82f, 20f, 96f, 12f, 104f, 20f)
+                quadTo(110f, 26f, 116f, 20f)
+                cubicTo(124f, 12f, 138f, 20f, 136f, 50f)
+                close()
+            }.also { c.drawPath(it, fill(Cowboy)) }
+            c.drawRect(RectF(84f, 40f, 136f, 46f), fill(CowboyD))
+            heart(c, 110f, 43f, 4f, Gold)
+        }
+    }
+
+    /** Bandeau éponge sur le front, rayure rose. */
+    private fun sportBand(c: Canvas) {
+        asWear {
+            Path().apply { moveTo(68f, 60f); quadTo(110f, 34f, 152f, 60f) }
+                .also { c.drawPath(it, stroke(Wool, 12f)) }
+            Path().apply { moveTo(70f, 60f); quadTo(110f, 36f, 150f, 60f) }
+                .also { c.drawPath(it, stroke(Bow, 3.2f)) }
+        }
+    }
+
+    // ---- corps -----------------------------------------------------------------
+
+    /** Les vêtements de la troisième fournée, déjà découpés dans le corps. */
+    private fun torsoMore(c: Canvas, wear: String, all: RectF): Boolean {
+        when (wear) {
+            "tshirt_coeur" -> {
+                c.drawRect(all, fill(Wool))
+                heart(c, 110f, 160f, 20f, Bow)
+                c.drawRect(RectF(58f, 190f, 162f, 198f), fill(Fuzz))
+            }
+            "chandail_arcenciel" -> {
+                RAINBOW.forEachIndexed { i, col ->
+                    c.drawRect(RectF(58f, 106f + i * 16f, 162f, 122f + i * 16f), fill(col))
+                }
+            }
+            "kimono" -> {
+                c.drawRect(all, fill(Petal))
+                // le croisé, en V, et la ceinture large
+                Path().apply { moveTo(92f, 108f); lineTo(112f, 150f); lineTo(118f, 150f); lineTo(100f, 108f); close() }
+                    .also { c.drawPath(it, fill(Bow)) }
+                Path().apply { moveTo(128f, 108f); lineTo(110f, 146f); lineTo(104f, 146f); lineTo(120f, 108f); close() }
+                    .also { c.drawPath(it, fill(Wool)) }
+                c.drawRect(RectF(58f, 146f, 162f, 160f), fill(BowD))
+                listOf(Triple(84f, 178f, 6f), Triple(130f, 182f, 5f), Triple(140f, 128f, 5f))
+                    .forEach { (x, y, r) -> flower(c, x, y, r, Wool) }
+            }
+            "veste_jean" -> {
+                c.drawRect(all, fill(Denim))
+                c.drawRect(RectF(108f, 106f, 112f, 198f), fill(DenimD))
+                c.drawRoundRect(RectF(82f, 136f, 102f, 152f), 3f, 3f, fill(DenimD))
+                c.drawRoundRect(RectF(118f, 136f, 138f, 152f), 3f, 3f, fill(DenimD))
+                listOf(144f, 168f).forEach { c.drawCircle(102f, it, 3f, fill(Gold)) }
+                c.drawRect(RectF(58f, 186f, 162f, 198f), fill(DenimD))
+                Path().apply { moveTo(84f, 108f); lineTo(104f, 128f); lineTo(108f, 108f); close() }
+                    .also { c.drawPath(it, fill(DenimD)) }
+                Path().apply { moveTo(136f, 108f); lineTo(116f, 128f); lineTo(112f, 108f); close() }
+                    .also { c.drawPath(it, fill(DenimD)) }
+            }
+            "robe_bal" -> {
+                c.drawRect(RectF(58f, 106f, 162f, 150f), fill(Lavender))
+                Path().apply { moveTo(86f, 148f); lineTo(134f, 148f); lineTo(166f, 198f); lineTo(54f, 198f); close() }
+                    .also { c.drawPath(it, fill(Lavender)) }
+                Path().apply { moveTo(100f, 150f); lineTo(90f, 198f); lineTo(80f, 198f); close() }
+                    .also { c.drawPath(it, fill(LavendD)) }
+                Path().apply { moveTo(120f, 150f); lineTo(130f, 198f); lineTo(140f, 198f); close() }
+                    .also { c.drawPath(it, fill(LavendD)) }
+                c.drawRect(RectF(58f, 144f, 162f, 152f), fill(Gold))
+                listOf(Triple(96f, 170f, 5f), Triple(124f, 180f, 4f), Triple(110f, 128f, 5f), Triple(84f, 188f, 4f))
+                    .forEach { (x, y, r) -> sparkle(c, x, y, r, Wool) }
+            }
+            "smoking" -> {
+                c.drawRect(all, fill(TopHat))
+                Path().apply { moveTo(94f, 106f); lineTo(126f, 106f); lineTo(110f, 172f); close() }
+                    .also { c.drawPath(it, fill(Wool)) }
+                listOf(140f, 154f).forEach { c.drawCircle(110f, it, 2.4f, fill(TopHat)) }
+                // le nœud papillon
+                Path().apply { moveTo(110f, 122f); lineTo(96f, 114f); lineTo(96f, 130f); close() }
+                    .also { c.drawPath(it, fill(Bow)) }
+                Path().apply { moveTo(110f, 122f); lineTo(124f, 114f); lineTo(124f, 130f); close() }
+                    .also { c.drawPath(it, fill(Bow)) }
+                c.drawCircle(110f, 122f, 3.6f, fill(BowD))
+            }
+            "chandail_fraise" -> {
+                c.drawRect(all, fill(Berry))
+                listOf(80f to 140f, 100f to 158f, 122f to 146f, 140f to 168f, 88f to 180f, 116f to 186f, 132f to 128f, 104f to 132f)
+                    .forEach { (x, y) -> c.drawOval(oval(x, y, 2.2f, 3.2f), fill(Seed)) }
+                Path().apply {
+                    moveTo(58f, 106f); lineTo(162f, 106f); lineTo(162f, 118f)
+                    lineTo(148f, 126f); lineTo(134f, 116f); lineTo(120f, 128f); lineTo(110f, 116f)
+                    lineTo(100f, 128f); lineTo(86f, 116f); lineTo(72f, 126f); lineTo(58f, 118f); close()
+                }.also { c.drawPath(it, fill(Leaf)) }
+            }
+            "sarrau" -> {
+                c.drawRect(all, fill(Chef))
+                c.drawRect(RectF(108f, 106f, 112f, 198f), fill(ChefD))
+                Path().apply { moveTo(86f, 108f); lineTo(106f, 134f); lineTo(108f, 108f); close() }
+                    .also { c.drawPath(it, fill(ChefD)) }
+                Path().apply { moveTo(134f, 108f); lineTo(114f, 134f); lineTo(112f, 108f); close() }
+                    .also { c.drawPath(it, fill(ChefD)) }
+                c.drawRoundRect(RectF(118f, 142f, 140f, 162f), 3f, 3f, fill(ChefD))
+                c.drawLine(124f, 134f, 124f, 146f, stroke(Ribbon, 3f))
+                c.drawLine(132f, 136f, 132f, 146f, stroke(Bow, 3f))
+                listOf(150f, 172f).forEach { c.drawCircle(104f, it, 2.6f, fill(ChefD)) }
+                // la croix de la docteure, sur le cœur
+                c.drawRect(RectF(84f, 146f, 96f, 150f), fill(Xmas))
+                c.drawRect(RectF(88f, 142f, 92f, 154f), fill(Xmas))
+            }
+            "gilet_sauvetage" -> {
+                c.drawOval(oval(110f, 166f, 26f, 31f), fill(Belly))
+                c.drawRect(RectF(58f, 106f, 100f, 198f), fill(Vest))
+                c.drawRect(RectF(120f, 106f, 162f, 198f), fill(Vest))
+                listOf(150f, 174f).forEach {
+                    c.drawRect(RectF(58f, it, 162f, it + 6f), fill(Ink))
+                    c.drawRoundRect(RectF(104f, it - 2f, 116f, it + 8f), 2f, 2f, fill(SneakD))
+                }
+                c.drawRect(RectF(58f, 132f, 100f, 136f), fill(Wool))
+                c.drawRect(RectF(120f, 132f, 162f, 136f), fill(Wool))
+            }
+            "habit_neige" -> {
+                c.drawRect(all, fill(Mint2))
+                var y = 118f
+                while (y < 198f) { c.drawRect(RectF(58f, y, 162f, y + 3f), fill(Mint2D)); y += 18f }
+                c.drawRect(RectF(58f, 158f, 162f, 164f), fill(Wool))
+                c.drawRect(RectF(107f, 106f, 113f, 198f), fill(Mint2D))
+            }
+            else -> return false
+        }
+        return true
+    }
+
+    // ---- pattes ----------------------------------------------------------------
+
+    /** Les chaussures de la troisième fournée. [foot] est la silhouette de la patte. */
+    private fun legMore(c: Canvas, wear: String, foot: Path): Boolean {
+        when (wear) {
+            "chaussettes_coeur" -> {
+                c.drawPath(foot, fill(Fuzz))
+                c.drawRoundRect(RectF(38f, 150f, 92f, 176f), 9f, 9f, fill(Fuzz))
+                c.drawRoundRect(RectF(38f, 150f, 92f, 158f), 4f, 4f, fill(Bow))
+                listOf(Triple(52f, 168f, 4.5f), Triple(74f, 172f, 4f), Triple(58f, 188f, 4f), Triple(78f, 190f, 3.6f))
+                    .forEach { (x, y, r) -> heart(c, x, y, r, Bow) }
+            }
+            "pantoufles_dragon" -> {
+                c.drawPath(foot, fill(Pink))
+                c.drawRoundRect(RectF(38f, 158f, 90f, 176f), 9f, 9f, fill(Pink))
+                // deux petites cornes molles et une paire d'yeux
+                listOf(52f, 72f).forEach { x ->
+                    Path().apply { moveTo(x - 5f, 162f); lineTo(x, 148f); lineTo(x + 5f, 162f); close() }
+                        .also { c.drawPath(it, fill(PinkDeep)) }
+                }
+                c.drawCircle(52f, 180f, 4.5f, fill(Wool)); c.drawCircle(52f, 180f, 2.3f, fill(Ink))
+                c.drawCircle(70f, 180f, 4.5f, fill(Wool)); c.drawCircle(70f, 180f, 2.3f, fill(Ink))
+                c.drawOval(oval(46f, 192f, 4f, 3f), fill(Blush))
+                c.drawOval(oval(76f, 192f, 4f, 3f), fill(Blush))
+            }
+            "bottes_neige" -> {
+                c.drawPath(foot, fill(Bear))
+                c.drawRoundRect(RectF(36f, 190f, 90f, 202f), 6f, 6f, fill(Hide))
+                c.drawRoundRect(RectF(40f, 150f, 92f, 178f), 8f, 8f, fill(Bear))
+                listOf(42f, 54f, 66f, 78f, 90f).forEach { c.drawCircle(it, 150f, 8f, fill(Wool)) }
+                val lace = stroke(BearD, 2.2f)
+                listOf(162f, 170f).forEach { c.drawLine(52f, it, 80f, it - 3f, lace) }
+            }
+            "souliers_vernis" -> {
+                c.drawPath(foot, fill(Xmas))
+                c.drawRoundRect(RectF(38f, 194f, 88f, 201f), 4f, 4f, fill(XmasDeep))
+                c.drawLine(50f, 172f, 80f, 168f, stroke(Xmas, 5f))
+                c.drawCircle(80f, 168f, 3.4f, fill(Gold))
+                c.drawLine(48f, 186f, 56f, 178f, stroke(Wool, 2.6f))     // le vernis
+            }
+            "palmes" -> {
+                Path().apply {
+                    moveTo(80f, 182f)
+                    lineTo(30f, 168f); lineTo(14f, 186f); lineTo(22f, 204f)
+                    lineTo(76f, 200f); close()
+                }.also { c.drawPath(it, fill(Swim)) }
+                val rib = stroke(0xFF2A8AAE.toInt(), 2.4f)
+                c.drawLine(74f, 186f, 22f, 172f, rib)
+                c.drawLine(74f, 190f, 16f, 188f, rib)
+                c.drawLine(74f, 194f, 22f, 202f, rib)
+                c.drawPath(foot, fill(Swim))
+                c.drawRoundRect(RectF(52f, 172f, 88f, 182f), 4f, 4f, fill(0xFF2A8AAE.toInt()))
+            }
+            "patins_roulettes" -> {
+                c.drawPath(foot, fill(Wool))
+                c.drawRoundRect(RectF(40f, 148f, 92f, 178f), 8f, 8f, fill(Wool))
+                c.drawRoundRect(RectF(40f, 148f, 92f, 154f), 3f, 3f, fill(Bow))
+                val lace = stroke(Bow, 2.2f)
+                listOf(160f, 168f, 176f).forEach { c.drawLine(50f, it, 84f, it - 3f, lace) }
+                c.drawRoundRect(RectF(36f, 196f, 90f, 202f), 3f, 3f, fill(SneakD))
+                c.drawCircle(48f, 206f, 6f, fill(Bow)); c.drawCircle(48f, 206f, 2f, fill(Wool))
+                c.drawCircle(78f, 206f, 6f, fill(Bow)); c.drawCircle(78f, 206f, 2f, fill(Wool))
+            }
+            "bottes_cowboy" -> {
+                c.drawPath(foot, fill(Cowboy))
+                c.drawRoundRect(RectF(40f, 146f, 92f, 178f), 6f, 6f, fill(Cowboy))
+                c.drawRoundRect(RectF(70f, 194f, 88f, 204f), 2f, 2f, fill(CowboyD))   // le talon
+                val stitch = stroke(Gold, 2f)
+                Path().apply { moveTo(50f, 152f); quadTo(66f, 170f, 82f, 152f) }.also { c.drawPath(it, stitch) }
+                Path().apply { moveTo(50f, 164f); quadTo(66f, 178f, 82f, 164f) }.also { c.drawPath(it, stitch) }
+                sparkle(c, 54f, 186f, 4f, Gold)
+            }
+            "sabots" -> {
+                c.drawPath(foot, fill(Lime))
+                c.drawRoundRect(RectF(36f, 192f, 90f, 202f), 5f, 5f, fill(LimeD))
+                listOf(52f to 178f, 64f to 176f, 76f to 178f, 46f to 186f, 58f to 186f, 70f to 186f)
+                    .forEach { (x, y) -> c.drawCircle(x, y, 2.4f, fill(LimeD)) }
+                Path().apply { moveTo(84f, 186f); quadTo(96f, 172f, 84f, 166f) }
+                    .also { c.drawPath(it, stroke(LimeD, 4f)) }
+                c.drawCircle(84f, 184f, 3f, fill(Wool))
+            }
+            "bas_arcenciel" -> {
+                val cuff = Path().apply { addRoundRect(RectF(38f, 150f, 92f, 176f), 9f, 9f, Path.Direction.CW) }
+                val whole = Path(foot).apply { op(cuff, Path.Op.UNION) }
+                c.save(); c.clipPath(whole)
+                RAINBOW.forEachIndexed { i, col ->
+                    c.drawRect(RectF(30f, 150f + i * 9f, 100f, 159f + i * 9f), fill(col))
+                }
+                c.restore()
+            }
+            "bottes_dorees" -> {
+                c.drawPath(foot, fill(Gold))
+                c.drawRoundRect(RectF(40f, 150f, 92f, 178f), 8f, 8f, fill(Gold))
+                c.drawRoundRect(RectF(36f, 192f, 90f, 202f), 5f, 5f, fill(GoldDeep))
+                c.drawRoundRect(RectF(40f, 150f, 92f, 156f), 3f, 3f, fill(GoldDeep))
+                sparkle(c, 60f, 168f, 6f, Wool)
+                c.drawLine(46f, 186f, 54f, 178f, stroke(Wool, 2.4f))
+            }
+            else -> return false
+        }
+        return true
+    }
+
+    // ---- ailes -----------------------------------------------------------------
+
+    /** Une demi-cœur par côté : repliées, elles font un cœur entier. */
+    private fun heartWing(c: Canvas) {
+        asWear {
+            val half = Path().apply {
+                moveTo(88f, 140f)
+                cubicTo(50f, 128f, 8f, 104f, 22f, 78f)
+                cubicTo(34f, 58f, 70f, 66f, 88f, 96f)
+                close()
+            }
+            c.drawPath(half, fill(Bow))
+            Path().apply { moveTo(80f, 128f); cubicTo(52f, 116f, 24f, 100f, 32f, 84f) }
+                .also { c.drawPath(it, stroke(Fuzz, 3f)) }
+            heart(c, 46f, 100f, 6f, Fuzz)
+        }
+    }
+
+    /** Trois nuages empilés. */
+    private fun cloudWing(c: Canvas) {
+        asWear {
+            listOf(
+                Triple(74f, 114f, 18f), Triple(52f, 100f, 20f), Triple(28f, 92f, 16f),
+                Triple(40f, 122f, 17f), Triple(64f, 136f, 15f)
+            ).forEach { (x, y, r) -> c.drawCircle(x, y + 2f, r, fill(CloudD)) }
+            listOf(
+                Triple(74f, 112f, 18f), Triple(52f, 98f, 20f), Triple(28f, 90f, 16f),
+                Triple(40f, 120f, 17f), Triple(64f, 134f, 15f)
+            ).forEach { (x, y, r) -> c.drawCircle(x, y, r, fill(Cloud)) }
+        }
+    }
+
+    /** Rayures roses et blanches en biais, comme une canne de Noël. */
+    private fun candyWing(c: Canvas) {
+        asWear {
+            c.save(); c.clipPath(batPath())
+            c.drawRect(RectF(0f, 50f, 100f, 160f), fill(Wool))
+            val band = stroke(Bow, 9f)
+            var x = -60f
+            while (x < 120f) { c.drawLine(x, 160f, x + 60f, 60f, band); x += 22f }
+            c.restore()
+            c.drawPath(batPath(), stroke(BowD, 3f))
+        }
+    }
+
+    /** Bleu électrique, bordées de noir, des points blancs au bord. */
+    private fun morphoWing(c: Canvas) {
+        asWear {
+            val upper = Path().apply {
+                moveTo(86f, 112f); cubicTo(74f, 78f, 40f, 60f, 16f, 72f)
+                cubicTo(6f, 92f, 38f, 112f, 86f, 112f); close()
+            }
+            val lower = Path().apply {
+                moveTo(86f, 118f); cubicTo(58f, 120f, 28f, 130f, 28f, 146f)
+                cubicTo(38f, 158f, 74f, 144f, 86f, 126f); close()
+            }
+            listOf(upper, lower).forEach {
+                c.drawPath(it, fill(Morpho))
+                c.save(); c.clipPath(it)
+                c.drawOval(oval(70f, 112f, 30f, 22f), fill(MorphoL))
+                c.restore()
+                c.drawPath(it, stroke(Chitin, 5f))
+            }
+            listOf(20f to 76f, 30f to 68f, 34f to 148f, 40f to 144f).forEach { (x, y) ->
+                c.drawCircle(x, y, 2.4f, fill(White))
+            }
+        }
+    }
+
+    /** En or, avec des étincelles. */
+    private fun goldWing(c: Canvas) {
+        asWear {
+            c.drawPath(batPath(), fill(Gold))
+            c.save(); c.clipPath(batPath())
+            c.drawOval(oval(40f, 120f, 40f, 24f), fill(GoldDeep))
+            c.restore()
+            batBones(c, GoldDeep)
+            sparkle(c, 30f, 92f, 6f, Wool)
+            sparkle(c, 58f, 132f, 4.5f, Wool)
+        }
+    }
+
+    /** Trois bandes d'aurore qui ondulent. */
+    private fun auroraWing(c: Canvas) {
+        asWear {
+            c.save(); c.clipPath(batPath())
+            c.drawRect(RectF(0f, 50f, 100f, 160f), fill(Night))
+            listOf(Aurora1 to 84f, Aurora2 to 104f, Aurora3 to 124f).forEach { (col, y) ->
+                Path().apply {
+                    moveTo(0f, y); quadTo(30f, y - 14f, 60f, y); quadTo(80f, y + 10f, 100f, y)
+                    lineTo(100f, y + 14f); quadTo(80f, y + 24f, 60f, y + 14f); quadTo(30f, y, 0f, y + 14f); close()
+                }.also { c.drawPath(it, fill(col)) }
+            }
+            c.drawCircle(24f, 98f, 1.6f, fill(Wool)); c.drawCircle(56f, 116f, 1.4f, fill(Wool))
+            c.restore()
+            batBones(c, 0xFF2C3766.toInt())
+        }
+    }
+
+    /** Couleurs d'érable, une nervure par feston. */
+    private fun autumnWing(c: Canvas) {
+        asWear {
+            c.save(); c.clipPath(batPath())
+            c.drawRect(RectF(0f, 50f, 100f, 160f), fill(Maple))
+            c.drawOval(oval(30f, 96f, 30f, 20f), fill(Monarch))
+            c.drawOval(oval(22f, 88f, 14f, 10f), fill(Pollen))
+            c.restore()
+            batBones(c, 0xFF8A2A18.toInt())
+            Path().apply { moveTo(60f, 92f); lineTo(64f, 84f); lineTo(68f, 92f); lineTo(76f, 90f); lineTo(70f, 98f); lineTo(58f, 98f); lineTo(52f, 90f); close() }
+                .also { c.drawPath(it, fill(Pollen)) }
+        }
+    }
+
+    /** Des carreaux de couleur sertis de plomb noir. */
+    private fun stainedWing(c: Canvas) {
+        asWear {
+            c.save(); c.clipPath(batPath())
+            val cells = intArrayOf(Bow, Teal, Pollen, Party, Aurora1, Monarch)
+            var i = 0
+            var y = 60f
+            while (y < 160f) {
+                var x = 0f
+                while (x < 100f) {
+                    c.drawRect(RectF(x, y, x + 20f, y + 18f), fill(cells[i % cells.size]))
+                    i++; x += 20f
+                }
+                i += 2; y += 18f
+            }
+            val lead = stroke(Chitin, 2.6f)
+            y = 60f; while (y < 160f) { c.drawLine(0f, y, 100f, y, lead); y += 18f }
+            var x = 0f; while (x < 100f) { c.drawLine(x, 60f, x, 160f, lead); x += 20f }
+            c.restore()
+            c.drawPath(batPath(), stroke(Chitin, 3.4f))
+        }
+    }
+
+    /** Turquoise, en écailles qui se chevauchent. */
+    private fun mermaidWing(c: Canvas) {
+        asWear {
+            c.drawPath(batPath(), fill(Mint2))
+            c.save(); c.clipPath(batPath())
+            val arc = stroke(Mint2D, 2f)
+            var row = 0
+            var y = 70f
+            while (y < 160f) {
+                var x = if (row % 2 == 0) 0f else 7f
+                while (x < 100f) {
+                    c.drawArc(RectF(x, y - 7f, x + 14f, y + 7f), 0f, 180f, false, arc)
+                    x += 14f
+                }
+                row++; y += 8f
+            }
+            c.restore()
+            batBones(c, Mint2D)
+            sparkle(c, 34f, 96f, 4.5f, Wool)
+        }
+    }
+
+    /** Petites, transparentes, deux lobes. */
+    private fun beeWing(c: Canvas) {
+        asWear {
+            listOf(
+                oval(52f, 96f, 36f, 20f) to -24f,
+                oval(58f, 128f, 26f, 14f) to 18f
+            ).forEach { (r, rot) ->
+                c.save(); c.rotate(rot, 86f, 116f)
+                c.drawOval(r, fill(0xFFE9F6FB.toInt()))
+                c.drawOval(r, stroke(0xFF9CC7D6.toInt(), 2f))
+                c.restore()
+            }
+            c.drawLine(84f, 112f, 24f, 82f, stroke(0xFF9CC7D6.toInt(), 1.6f))
+            c.drawLine(84f, 120f, 40f, 136f, stroke(0xFF9CC7D6.toInt(), 1.6f))
+            sparkle(c, 30f, 90f, 4f, Wool)
+        }
+    }
+
+    // ---- compagnons --------------------------------------------------------------
+
+    /** Deux grandes oreilles, dont une qui retombe. */
+    private fun lapin(c: Canvas) {
+        asWear {
+            plushBody(c, Wool, Fuzz)
+            c.drawOval(oval(180f, 150f, 4.5f, 14f), fill(Wool))
+            c.drawOval(oval(180f, 151f, 2.2f, 10f), fill(Petal))
+            c.save(); c.rotate(50f, 192f, 162f)
+            c.drawOval(oval(192f, 150f, 4.5f, 13f), fill(Wool))
+            c.drawOval(oval(192f, 151f, 2.2f, 9f), fill(Petal))
+            c.restore()
+            c.drawOval(oval(186f, 174f, 14f, 12f), fill(Wool))
+            c.drawOval(oval(186f, 178f, 2.4f, 1.8f), fill(Bow))
+            plushFace(c, 172f)
+        }
+    }
+
+    /** Orange, museau blanc, oreilles pointues, la queue au bout blanc. */
+    private fun renard(c: Canvas) {
+        asWear {
+            Path().apply { moveTo(200f, 196f); cubicTo(220f, 196f, 222f, 172f, 208f, 170f); cubicTo(210f, 184f, 204f, 190f, 196f, 190f); close() }
+                .also { c.drawPath(it, fill(Fox)) }
+            c.drawCircle(209f, 172f, 4f, fill(Wool))
+            plushBody(c, Fox, Wool)
+            listOf(176f to -1f, 196f to 1f).forEach { (x, d) ->
+                Path().apply { moveTo(x - 6f * d, 172f); lineTo(x + 1f * d, 158f); lineTo(x + 7f * d, 171f); close() }
+                    .also { c.drawPath(it, fill(Fox)) }
+                Path().apply { moveTo(x - 3f * d, 170f); lineTo(x + 1f * d, 162f); lineTo(x + 4f * d, 170f); close() }
+                    .also { c.drawPath(it, fill(Ink)) }
+            }
+            c.drawOval(oval(186f, 174f, 14f, 12f), fill(Fox))
+            Path().apply { moveTo(174f, 176f); quadTo(186f, 168f, 198f, 176f); quadTo(186f, 190f, 174f, 176f); close() }
+                .also { c.drawPath(it, fill(Wool)) }
+            c.drawCircle(186f, 180f, 2.2f, fill(Ink))
+            plushFace(c, 171f, smile = false)
+        }
+    }
+
+    /** Blanc et noir, les yeux cernés. */
+    private fun panda(c: Canvas) {
+        asWear {
+            plushBody(c, Wool, Wool)
+            c.drawOval(oval(172f, 192f, 5f, 7f), fill(Panda))
+            c.drawOval(oval(200f, 192f, 5f, 7f), fill(Panda))
+            c.drawCircle(175f, 164f, 6f, fill(Panda))
+            c.drawCircle(197f, 164f, 6f, fill(Panda))
+            c.drawOval(oval(186f, 174f, 14f, 12.5f), fill(Wool))
+            c.save(); c.rotate(-20f, 180f, 173f); c.drawOval(oval(180f, 173f, 4f, 5f), fill(Panda)); c.restore()
+            c.save(); c.rotate(20f, 192f, 173f); c.drawOval(oval(192f, 173f, 4f, 5f), fill(Panda)); c.restore()
+            c.drawCircle(181f, 172f, 1.5f, fill(Wool))
+            c.drawCircle(191f, 172f, 1.5f, fill(Wool))
+            c.drawOval(oval(186f, 179f, 2.4f, 1.8f), fill(Panda))
+        }
+    }
+
+    /** Jaune, un bec, une plume sur la tête. */
+    private fun poussin(c: Canvas) {
+        asWear {
+            listOf(180f, 192f).forEach { x -> c.drawOval(oval(x, 203f, 4f, 2.4f), fill(Beak)) }
+            c.drawOval(oval(186f, 202f, 20f, 6f), fill(Shade).apply { alpha = 170 })
+            p.alpha = 255
+            c.drawOval(oval(186f, 184f, 17f, 18f), fill(Chick))
+            listOf(169f to -1f, 203f to 1f).forEach { (x, d) ->
+                c.drawOval(oval(x + d * 1f, 190f, 4f, 7f), fill(0xFFF2BE2E.toInt()))
+            }
+            Path().apply { moveTo(186f, 168f); quadTo(184f, 158f, 190f, 156f); quadTo(188f, 162f, 190f, 168f); close() }
+                .also { c.drawPath(it, fill(0xFFF2BE2E.toInt())) }
+            Path().apply { moveTo(182f, 180f); lineTo(190f, 180f); lineTo(186f, 185f); close() }
+                .also { c.drawPath(it, fill(Beak)) }
+            c.drawCircle(180f, 175f, 2f, fill(Ink))
+            c.drawCircle(192f, 175f, 2f, fill(Ink))
+            c.drawOval(oval(176f, 181f, 3f, 2f), fill(Blush))
+            c.drawOval(oval(196f, 181f, 3f, 2f), fill(Blush))
+        }
+    }
+
+    /** Grise, oreilles immenses, queue en tire-bouchon. */
+    private fun souris(c: Canvas) {
+        asWear {
+            Path().apply { moveTo(202f, 196f); cubicTo(214f, 198f, 218f, 186f, 210f, 184f); cubicTo(204f, 182f, 206f, 192f, 214f, 190f) }
+                .also { c.drawPath(it, stroke(Petal, 2.4f)) }
+            plushBody(c, Mouse, Wool)
+            c.drawCircle(173f, 164f, 9f, fill(Mouse)); c.drawCircle(173f, 164f, 5.5f, fill(Petal))
+            c.drawCircle(199f, 164f, 9f, fill(Mouse)); c.drawCircle(199f, 164f, 5.5f, fill(Petal))
+            c.drawOval(oval(186f, 175f, 13f, 12f), fill(Mouse))
+            c.drawCircle(186f, 180f, 2.4f, fill(Bow))
+            val whisker = stroke(MouseD, 1.2f)
+            c.drawLine(172f, 180f, 180f, 180f, whisker); c.drawLine(200f, 180f, 192f, 180f, whisker)
+            plushFace(c, 173f, smile = false)
+        }
+    }
+
+    /** Une boule de laine, une petite face foncée. */
+    private fun mouton(c: Canvas) {
+        asWear {
+            c.drawOval(oval(186f, 202f, 20f, 6f), fill(Shade).apply { alpha = 170 })
+            p.alpha = 255
+            listOf(Triple(174f, 192f, 9f), Triple(198f, 192f, 9f), Triple(186f, 196f, 10f),
+                Triple(172f, 180f, 9f), Triple(200f, 180f, 9f), Triple(186f, 184f, 13f),
+                Triple(178f, 168f, 8f), Triple(194f, 168f, 8f), Triple(186f, 164f, 8f))
+                .forEach { (x, y, r) -> c.drawCircle(x, y, r, fill(Wool)) }
+            c.drawOval(oval(174f, 176f, 5f, 3f), fill(0xFF5A4A52.toInt()))
+            c.drawOval(oval(198f, 176f, 5f, 3f), fill(0xFF5A4A52.toInt()))
+            c.drawOval(oval(186f, 178f, 9f, 10f), fill(0xFF5A4A52.toInt()))
+            c.drawCircle(182f, 176f, 1.7f, fill(Wool))
+            c.drawCircle(190f, 176f, 1.7f, fill(Wool))
+            c.drawOval(oval(186f, 183f, 2.4f, 1.6f), fill(Petal))
+        }
+    }
+
+    /** Violette, des bras ondulés tout autour. */
+    private fun pieuvre(c: Canvas) {
+        asWear {
+            c.drawOval(oval(186f, 204f, 22f, 5f), fill(Shade).apply { alpha = 170 })
+            p.alpha = 255
+            val arm = stroke(OctoD, 5f)
+            listOf(-18f, -10f, -3f, 4f, 11f, 18f).forEach { dx ->
+                Path().apply { moveTo(186f + dx * 0.6f, 186f); quadTo(186f + dx * 1.1f, 196f, 186f + dx * 1.3f - 3f, 202f) }
+                    .also { c.drawPath(it, arm) }
+            }
+            c.drawOval(oval(186f, 178f, 17f, 17f), fill(Octo))
+            listOf(176f to 170f, 196f to 168f, 190f to 186f).forEach { (x, y) -> c.drawCircle(x, y, 2.2f, fill(OctoD)) }
+            plushFace(c, 178f)
+            c.drawOval(oval(176f, 184f, 3f, 2f), fill(Blush))
+            c.drawOval(oval(196f, 184f, 3f, 2f), fill(Blush))
+        }
+    }
+
+    /** Vert, des piquants mous sur le dos. */
+    private fun dino(c: Canvas) {
+        asWear {
+            Path().apply { moveTo(200f, 196f); quadTo(218f, 198f, 216f, 186f); quadTo(208f, 192f, 198f, 186f); close() }
+                .also { c.drawPath(it, fill(Dino)) }
+            plushBody(c, Dino, 0xFFE3F2C2.toInt())
+            listOf(Triple(178f, 162f, 5f), Triple(188f, 159f, 5.5f), Triple(198f, 163f, 5f), Triple(205f, 172f, 4.5f))
+                .forEach { (x, y, r) -> triangle(c, x, y, r, DinoD) }
+            c.drawOval(oval(186f, 175f, 14f, 12f), fill(Dino))
+            c.drawCircle(183f, 180f, 1f, fill(DinoD)); c.drawCircle(189f, 180f, 1f, fill(DinoD))
+            plushFace(c, 172f)
+        }
+    }
+
+    /** Rayée jaune et noir, deux petites ailes. */
+    private fun abeille(c: Canvas) {
+        asWear {
+            c.drawOval(oval(178f, 168f, 6f, 9f), fill(0xFFE9F6FB.toInt()))
+            c.drawOval(oval(194f, 168f, 6f, 9f), fill(0xFFE9F6FB.toInt()))
+            c.drawOval(oval(186f, 202f, 20f, 6f), fill(Shade).apply { alpha = 170 })
+            p.alpha = 255
+            val body = Path().apply { addOval(oval(186f, 186f, 18f, 16f), Path.Direction.CW) }
+            c.drawPath(body, fill(Bee))
+            c.save(); c.clipPath(body)
+            listOf(184f, 194f).forEach { c.drawRect(RectF(166f, it, 206f, it + 5f), fill(Chitin)) }
+            c.restore()
+            listOf(-1f, 1f).forEach { d ->
+                c.drawLine(186f + d * 4f, 172f, 186f + d * 9f, 162f, stroke(Chitin, 1.8f))
+                c.drawCircle(186f + d * 9f, 161f, 2.4f, fill(Chitin))
+            }
+            plushFace(c, 177f)
+        }
+    }
+
+    /** Masque noir, queue rayée. */
+    private fun raton(c: Canvas) {
+        asWear {
+            val tail = Path().apply { moveTo(200f, 196f); cubicTo(222f, 196f, 222f, 172f, 210f, 168f); cubicTo(212f, 182f, 206f, 190f, 196f, 190f); close() }
+            c.drawPath(tail, fill(Coon))
+            c.save(); c.clipPath(tail)
+            listOf(176f, 186f).forEach { c.drawRect(RectF(196f, it, 224f, it + 5f), fill(CoonD)) }
+            c.restore()
+            plushBody(c, Coon, Wool)
+            listOf(175f to -1f, 197f to 1f).forEach { (x, d) ->
+                Path().apply { moveTo(x - 5f * d, 172f); lineTo(x + 1f * d, 161f); lineTo(x + 6f * d, 171f); close() }
+                    .also { c.drawPath(it, fill(CoonD)) }
+            }
+            c.drawOval(oval(186f, 175f, 14f, 12f), fill(Coon))
+            c.drawRoundRect(RectF(174f, 168f, 198f, 176f), 4f, 4f, fill(CoonD))
+            c.drawOval(oval(186f, 181f, 6f, 4f), fill(Wool))
+            c.drawCircle(186f, 179f, 1.8f, fill(Ink))
+            c.drawCircle(181f, 172f, 1.9f, fill(Wool))
+            c.drawCircle(191f, 172f, 1.9f, fill(Wool))
+        }
     }
 
     /** Le dragon entier sur fond transparent — widget, aperçus, tout ce qui n'est pas Compose. */

@@ -366,7 +366,9 @@ object Reminders {
         val now = System.currentTimeMillis()
         val windowEnd = Slots.windowEnd(med, slot)
         val at = when {
-            tier == Tier.SERIEUX -> Slots.dayAfter(Slots.dayOf(now)) + 60_000L
+            // Au dernier palier, on se tait jusqu'à ce que la journée se referme pour de
+            // bon — 3h du matin la nuit suivante — puis l'alarme vient tout ranger.
+            tier == Tier.SERIEUX -> Slots.dayClosesAt(slot) + 60_000L
             // Pendant la plage, la prochaine relance n'est pas dans dix minutes : c'est
             // celle qui ouvre l'escalade, à la fin de la plage. Rien ne peut changer d'ici
             // là, donc rien ne justifie de réveiller le téléphone dix-huit fois pour
@@ -623,9 +625,12 @@ object Reminders {
             try {
                 val dao = Db.get(ctx).dao()
                 val med = dao.med(tagId) ?: return@launch
-                // Past midnight the slot this alarm belongs to is yesterday's, and
-                // yesterday is not recoverable. Clear it and wait for today's.
-                if (slot != Slots.todayAt(med) || dao.logForSlot(tagId, slot) != null) {
+                // Après minuit, le créneau de cette alarme est celui d'hier. Il reste
+                // vivant jusqu'à 3h — la dose d'hier peut encore être notée — puis la
+                // journée se referme : on range tout et on attend celui d'aujourd'hui.
+                val stillOpen = slot == Slots.todayAt(med) ||
+                    (slot == Slots.slotDaysAgo(med, 1) && System.currentTimeMillis() < Slots.dayClosesAt(slot))
+                if (!stillOpen || dao.logForSlot(tagId, slot) != null) {
                     NotificationManagerCompat.from(ctx).cancel(notifId(tagId))
                     cancelNag(ctx, med, slot); scheduleNext(ctx, med)
                     return@launch

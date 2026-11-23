@@ -92,7 +92,7 @@ private val clock = SimpleDateFormat("H'h'mm", Locale.CANADA_FRENCH)
 
 /** « 7h00 », à partir de minutes depuis minuit. */
 private fun hhmm(minuteOfDay: Int): String =
-    String.format(Locale.CANADA_FRENCH, "%dh%02d", minuteOfDay / 60, minuteOfDay % 60)
+    String.format(Locale.CANADA_FRENCH, "%dh%02d", (minuteOfDay % 1440) / 60, minuteOfDay % 60)
 
 /** La plage de [med] pour la journée de [now]. */
 private fun Medication.windowToday(now: Long): DayWindow = windowOn(

@@ -119,7 +119,7 @@ fun Medication.windowOn(dayIndex: Int): DayWindow {
     if (dash <= 0) return fallback
     val start = token.substring(0, dash).trim().toIntOrNull() ?: return fallback
     val end = token.substring(dash + 1).trim().toIntOrNull() ?: return fallback
-    if (start !in 0..1439 || end !in 0..1439) return fallback
+    if (start !in 0..1439 || end !in 0..Slots.LATEST_END_MINUTE) return fallback
     return DayWindow(start, end)
 }
 
@@ -247,6 +247,12 @@ interface MedDao {
     @Query("SELECT * FROM StreakFreeze")
     suspend fun allFreezes(): List<StreakFreeze>
 
+    @Query("SELECT * FROM StreakSeed WHERE id = 0 LIMIT 1")
+    suspend fun streakSeed(): StreakSeed?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun setStreakSeed(s: StreakSeed)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun recordPost(p: ReminderPost)
 
@@ -285,6 +291,22 @@ data class StreakFreeze(
  * Ceci détecte une panne réelle : le créneau est passé, aucun rappel n'a été posé, aucune
  * dose n'a été notée.
  */
+/**
+ * La série posée à la main, par le réglage caché derrière « Je t'aime ».
+ *
+ * On ne réécrit pas l'historique pour fabriquer des doses : on retient seulement
+ * « au soir de [anchorDay], la série valait [value] ». Le compte continue ensuite tout
+ * seul à partir de là — chaque journée complète après [anchorDay] ajoute un — et un
+ * vrai oubli après cette date la remet à zéro comme d'habitude. Une seule ligne, id 0.
+ */
+@Entity
+data class StreakSeed(
+    @PrimaryKey val id: Int = 0,
+    val value: Int,
+    val anchorDay: Long,                // minuit du dernier jour compté dans [value]
+    val setAt: Long
+)
+
 @Entity(primaryKeys = ["tagId", "slot"])
 data class ReminderPost(
     val tagId: String,
@@ -386,9 +408,13 @@ suspend fun MedDao.perfectDayStreak(
 ): Int {
     if (meds.isEmpty()) return 0
     val frozen = freezeDays().toSet()
+    val seed = streakSeed()
     var n = from
     while (n < 3650) {
         val dayStart = Slots.dayStart(n, now)
+        // Arrivé au jour où la série a été posée à la main : tout ce qui est avant est
+        // résumé par la valeur choisie, on n'a plus besoin de le recompter.
+        if (seed != null && dayStart <= seed.anchorDay) return (n - from) + seed.value
         val due = meds.dueOn(dayStart)
         if (due.isEmpty()) return n - from
         val done = due.all { logForSlot(it.tagId, Slots.slotDaysAgo(it, n, now)) != null }
@@ -411,7 +437,42 @@ suspend fun MedDao.currentStreak(
 ): Int {
     if (meds.isEmpty()) return 0
     val todayDone = meds.all { logForSlot(it.tagId, Slots.todayAt(it, now)) != null }
-    return if (todayDone) perfectDayStreak(meds, 0, now) else perfectDayStreak(meds, 1, now)
+    if (todayDone) return perfectDayStreak(meds, 0, now)
+    // Avant 3h du matin, hier n'est pas encore fini : sa dose peut encore être notée.
+    // Tant qu'elle ne l'est pas, on montre la série d'avant-hier plutôt qu'un zéro.
+    if (Slots.yesterdayStillOpen(now)) {
+        val yesterdayDone = meds.dueOn(Slots.dayStart(1, now))
+            .all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 1, now)) != null }
+        if (!yesterdayDone) return perfectDayStreak(meds, 2, now)
+    }
+    return perfectDayStreak(meds, 1, now)
+}
+
+/**
+ * Le jour qui termine la série telle qu'on la lit maintenant : aujourd'hui s'il est
+ * complet, sinon hier (ou avant-hier, avant 3h, tant qu'hier attend encore sa dose).
+ * C'est là que s'accroche une série posée à la main, pour que le chiffre choisi soit
+ * exactement celui qui s'affiche.
+ */
+suspend fun MedDao.streakAnchorDay(
+    meds: List<Medication>,
+    now: Long = System.currentTimeMillis()
+): Long {
+    val todayDone = meds.isNotEmpty() &&
+        meds.all { logForSlot(it.tagId, Slots.todayAt(it, now)) != null }
+    if (todayDone) return Slots.dayStart(0, now)
+    if (Slots.yesterdayStillOpen(now)) {
+        val yesterdayDone = meds.dueOn(Slots.dayStart(1, now))
+            .all { logForSlot(it.tagId, Slots.slotDaysAgo(it, 1, now)) != null }
+        if (!yesterdayDone) return Slots.dayStart(2, now)
+    }
+    return Slots.dayStart(1, now)
+}
+
+/** Pose la série à [value], à partir de maintenant. */
+suspend fun MedDao.overrideStreak(value: Int, now: Long = System.currentTimeMillis()) {
+    val meds = activeMedsOnce()
+    setStreakSeed(StreakSeed(0, value.coerceAtLeast(0), streakAnchorDay(meds, now), now))
 }
 
 /**
@@ -424,6 +485,9 @@ suspend fun MedDao.currentStreak(
 suspend fun MedDao.useFreezeIfNeeded(now: Long = System.currentTimeMillis()): Boolean {
     val meds = activeMedsOnce()
     if (meds.isEmpty()) return false
+    // Avant 3h, hier n'est pas fini : sa dose peut encore arriver. Geler maintenant
+    // gaspillerait le gel de la semaine sur une journée qui n'est pas manquée.
+    if (Slots.yesterdayStillOpen(now)) return false
 
     // Sur la même base que la série : un médicament ajouté aujourd'hui n'a pas « manqué »
     // hier, et ne doit donc pas déclencher un gel — il n'y a rien à protéger.
@@ -567,12 +631,23 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/** Version 7 : la série posée à la main (voir [StreakSeed]). Une table neuve, rien d'autre. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `StreakSeed` (`id` INTEGER NOT NULL, " +
+                "`value` INTEGER NOT NULL, `anchorDay` INTEGER NOT NULL, " +
+                "`setAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+        )
+    }
+}
+
 @Database(
     entities = [
         Medication::class, DoseLog::class, OwnedCosmetic::class,
-        StreakFreeze::class, ReminderPost::class
+        StreakFreeze::class, ReminderPost::class, StreakSeed::class
     ],
-    version = 6, exportSchema = false
+    version = 7, exportSchema = false
 )
 abstract class Db : RoomDatabase() {
     abstract fun dao(): MedDao
@@ -582,7 +657,8 @@ abstract class Db : RoomDatabase() {
         fun get(ctx: Context): Db = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "medtap.db")
                 .addMigrations(
-                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+                    MIGRATION_6_7
                 )
                 .build().also { instance = it }
         }
@@ -719,13 +795,25 @@ object Slots {
     }.timeInMillis
 
     /**
-     * Jusqu'à quand, après son heure, un créneau d'hier soir reste enregistrable.
-     *
-     * Six heures : une pilule de 21h prise à 0h30 est manifestement la pilule d'hier, une
-     * pilule de 9h « prise » le lendemain à 1h du matin ne l'est plus, c'est une journée
-     * manquée qu'on maquillerait. La borne tombe entre les deux.
+     * L'heure, la nuit suivante, où la journée d'hier se referme pour de bon : 3h du
+     * matin. Avant, la dose d'hier se notait encore pendant n'importe quelle heure
+     * jusqu'à 3h ; à 3h pile, hier est terminé et ce qui n'est pas noté est manqué.
      */
-    const val LATE_WINDOW = 6 * 60 * 60 * 1000L
+    const val DAY_ENDS_AT_HOUR = 3
+
+    /** La fin de plage la plus tardive qu'on peut régler : 3h du matin le lendemain. */
+    const val LATEST_END_MINUTE = 24 * 60 + DAY_ENDS_AT_HOUR * 60
+
+    /** Vraie entre minuit et 3h : la journée d'hier accepte encore sa dose. */
+    fun yesterdayStillOpen(now: Long = System.currentTimeMillis()): Boolean =
+        Calendar.getInstance().apply { timeInMillis = now }
+            .get(Calendar.HOUR_OF_DAY) < DAY_ENDS_AT_HOUR
+
+    /** L'instant où la journée de [slot] se referme : 3h du matin le lendemain. */
+    fun dayClosesAt(slot: Long): Long = Calendar.getInstance().apply {
+        timeInMillis = dayAfter(dayOf(slot))
+        set(Calendar.HOUR_OF_DAY, DAY_ENDS_AT_HOUR)
+    }.timeInMillis
 
     /**
      * Les créneaux qu'une prise faite maintenant peut satisfaire, du plus probable au
@@ -757,7 +845,9 @@ object Slots {
         //
         // La même règle des deux côtés, donc : ce que le bouton propose d'écrire est
         // exactement ce que la série accepte de compter.
-        if (now - yesterday in 0..LATE_WINDOW && dayOf(med.createdAt) <= dayOf(yesterday)) {
+        if (now >= yesterday && now < dayClosesAt(yesterday) &&
+            dayOf(med.createdAt) <= dayOf(yesterday)
+        ) {
             out += yesterday
         }
         return out

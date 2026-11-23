@@ -117,7 +117,9 @@ class MainActivity : ComponentActivity() {
                             previewUntil = state.value.previewUntil,
                             onToggle = { id -> toggleCosmetic(id) },
                             onCode = { startPreview(it) },
-                            onOpenSkyLab = { showSkyLab = true }
+                            onOpenSkyLab = { showSkyLab = true },
+                            streak = state.value.streak,
+                            onSetStreak = { setStreak(it) }
                         )
                         2 -> SettingsScreen(
                             batteryRestricted = state.value.batteryRestricted,
@@ -247,9 +249,13 @@ class MainActivity : ComponentActivity() {
         // Is this the last dose of the day? Counting every medication scheduled today,
         // not only the ones already due -- a 9pm pill still outstanding means the day is
         // not finished, however early it is.
+        //
+        // Entre minuit et 3h, la dose notée peut être celle d'HIER : c'est alors hier
+        // qu'on regarde, pour que la fête parte au moment où la journée se complète.
         val meds = dao.activeMedsOnce()
-        val complete = meds.all { dao.logForSlot(it.tagId, Slots.todayAt(it)) != null }
-        val days = if (complete) dao.perfectDayStreak(meds) else 0
+        val back = if (Slots.dayOf(slot) < Slots.dayOf(System.currentTimeMillis())) 1 else 0
+        val complete = meds.all { dao.logForSlot(it.tagId, Slots.slotDaysAgo(it, back)) != null }
+        val days = if (complete) dao.perfectDayStreak(meds, back) else 0
 
         val inApp = withContext(Dispatchers.Main) { watchingNow() }
 
@@ -325,6 +331,21 @@ class MainActivity : ComponentActivity() {
             previewWorn = state.value.worn
         )
         return true
+    }
+
+    /**
+     * Le réglage caché derrière « Je t'aime » : poser la série à la valeur voulue.
+     * Recalculée tout de suite pour que l'écran et le widget suivent sans attendre la
+     * prochaine dose.
+     */
+    private fun setStreak(value: Int) = lifecycleScope.launch(Dispatchers.IO) {
+        val dao = Db.get(this@MainActivity).dao()
+        dao.overrideStreak(value)
+        val streak = dao.currentStreak(dao.activeMedsOnce())
+        withContext(Dispatchers.Main) {
+            state.value = state.value.copy(streak = streak)
+            DragonWidget.refresh(this@MainActivity)
+        }
     }
 
     private fun toggleCosmetic(id: String) {
